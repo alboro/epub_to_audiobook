@@ -3,6 +3,7 @@ from pathlib import Path
 
 from audiobook_generator.config.general_config import GeneralConfig
 from audiobook_generator.core.audiobook_generator import AudiobookGenerator
+from audiobook_generator.normalizers.base_normalizer import get_supported_normalizers
 from audiobook_generator.tts_providers.base_tts_provider import (
     get_supported_tts_providers,
 )
@@ -110,6 +111,25 @@ def handle_args():
         "However, it's recommended to use direct write for most cases as it's faster. "
         "Only use this option if you encounter issues with direct write.",
     )
+    parser.add_argument(
+        "--package_m4b",
+        action="store_true",
+        help="Package generated chapter audio files into a single m4b audiobook with chapter markers.",
+    )
+    parser.add_argument(
+        "--m4b_filename",
+        help="Optional output filename for the packaged m4b file.",
+    )
+    parser.add_argument(
+        "--m4b_bitrate",
+        default="64k",
+        help="AAC bitrate for m4b packaging (default: 64k).",
+    )
+    parser.add_argument(
+        "--ffmpeg_path",
+        default="ffmpeg",
+        help="Path to ffmpeg binary used for m4b packaging.",
+    )
 
     parser.add_argument(
         "--voice_name",
@@ -137,6 +157,109 @@ def handle_args():
     openai_tts_group.add_argument(
         "--instructions",
         help="Instructions for the TTS model. Only supported for 'gpt-4o-mini-tts' model.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_api_key",
+        help="Optional API key override for OpenAI-compatible TTS servers.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_base_url",
+        help="Optional base URL override for OpenAI-compatible TTS servers.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_max_chars",
+        default=1800,
+        type=int,
+        help="Local chunk size before sending text to the OpenAI TTS provider. Set to 0 or a negative value to disable local chunking.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_enable_polling",
+        action="store_true",
+        help="Use submit/poll/download workflow instead of standard synchronous OpenAI TTS response handling.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_submit_url",
+        help="Submit endpoint for polling-based OpenAI-compatible TTS servers.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_status_url_template",
+        help="Status URL template for polling-based TTS servers, for example '/tts/jobs/{job_id}'.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_download_url_template",
+        help="Optional download URL template for completed jobs, for example '/tts/jobs/{job_id}/audio'.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_job_id_path",
+        default="id",
+        help="Dot path to job id in submit response JSON (default: id).",
+    )
+    openai_tts_group.add_argument(
+        "--openai_job_status_path",
+        default="status",
+        help="Dot path to job status in polling response JSON (default: status).",
+    )
+    openai_tts_group.add_argument(
+        "--openai_job_download_url_path",
+        default="download_url",
+        help="Dot path to download URL in polling response JSON (default: download_url).",
+    )
+    openai_tts_group.add_argument(
+        "--openai_job_done_values",
+        default="done,completed,succeeded,success",
+        help="Comma-separated status values that mean the polling job is complete.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_job_failed_values",
+        default="failed,error,cancelled",
+        help="Comma-separated status values that mean the polling job has failed.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_poll_interval",
+        default=120,
+        type=int,
+        help="Polling interval in seconds for job-based OpenAI-compatible TTS servers.",
+    )
+    openai_tts_group.add_argument(
+        "--openai_poll_timeout",
+        default=14400,
+        type=int,
+        help="Maximum time in seconds to wait for a polling TTS job before failing.",
+    )
+
+    normalizer_group = parser.add_argument_group(title="normalizer specific")
+    normalizer_group.add_argument(
+        "--normalize",
+        action="store_true",
+        help="Normalize chapter text with an LLM before sending it to TTS.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_provider",
+        choices=get_supported_normalizers(),
+        default="openai",
+        help="Choose normalizer provider (default: openai).",
+    )
+    normalizer_group.add_argument(
+        "--normalize_model",
+        help="Model name for the LLM normalizer.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_prompt_file",
+        help="Optional text file with a custom system prompt for the normalizer.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_api_key",
+        help="Optional API key override for the normalizer endpoint.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_base_url",
+        help="Optional base URL override for the normalizer endpoint.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_max_chars",
+        default=4000,
+        type=int,
+        help="Maximum characters per normalization request. Use a negative value to disable local splitting.",
     )
 
     edge_tts_group = parser.add_argument_group(title="edge specific")

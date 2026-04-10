@@ -5,6 +5,8 @@ import os
 from audiobook_generator.book_parsers.base_book_parser import get_book_parser
 from audiobook_generator.config.general_config import GeneralConfig
 from audiobook_generator.core.audio_tags import AudioTags
+from audiobook_generator.core.m4b_packager import package_m4b
+from audiobook_generator.normalizers.base_normalizer import get_normalizer
 from audiobook_generator.tts_providers.base_tts_provider import get_tts_provider
 from audiobook_generator.utils.log_handler import setup_logging
 from audiobook_generator.utils.filename_sanitizer import make_safe_filename
@@ -39,6 +41,7 @@ class AudiobookGenerator:
         try:
             logger.info(f"Processing chapter {idx}: {title}")
             tts_provider = get_tts_provider(self.config)
+            normalizer = get_normalizer(self.config) if self.config.normalize else None
 
             # Save chapter text if required
             if self.config.output_text:
@@ -71,7 +74,11 @@ class AudiobookGenerator:
             audio_tags = AudioTags(
                 title, book_parser.get_book_author(), book_parser.get_book_title(), idx
             )
-            tts_provider.text_to_speech(text, output_file, audio_tags)
+            text_for_tts = text
+            if normalizer:
+                text_for_tts = normalizer.normalize(text, chapter_title=title)
+
+            tts_provider.text_to_speech(text_for_tts, output_file, audio_tags)
 
             logger.info(f"✅ Converted chapter {idx}: {title}, output file: {output_file}")
 
@@ -142,6 +149,27 @@ class AudiobookGenerator:
                     chapters_to_process, start=self.config.chapter_start
                 )
             ]
+            chapter_output_records = []
+            chapter_audio_ext = "." + tts_provider.get_output_file_extension()
+            for idx, (title, _text) in enumerate(
+                chapters_to_process, start=self.config.chapter_start
+            ):
+                chapter_output_records.append(
+                    (
+                        idx,
+                        title,
+                        os.path.join(
+                            self.config.output_folder,
+                            make_safe_filename(
+                                title=title,
+                                idx=idx,
+                                output_dir=self.config.output_folder,
+                                ext=chapter_audio_ext,
+                                collision_check=False,
+                            ),
+                        ),
+                    )
+                )
 
             # Track failed chapters
             failed_chapters = []
@@ -169,10 +197,32 @@ class AudiobookGenerator:
             else:
                 logger.info(f"All chapters converted successfully. Check your output directory: {self.config.output_folder}")
 
+            if (
+                self.config.package_m4b
+                and not self.config.preview
+                and not failed_chapters
+            ):
+                chapter_files = [path for _, _, path in chapter_output_records if os.path.exists(path)]
+                chapter_titles = [title for _, title, path in chapter_output_records if os.path.exists(path)]
+                if len(chapter_files) != len(chapter_output_records):
+                    logger.warning("Skipping m4b packaging because not all chapter files were produced.")
+                else:
+                    m4b_path = package_m4b(
+                        chapter_files=chapter_files,
+                        chapter_titles=chapter_titles,
+                        book_title=book_parser.get_book_title(),
+                        book_author=book_parser.get_book_author(),
+                        output_dir=self.config.output_folder,
+                        ffmpeg_path=self.config.ffmpeg_path,
+                        output_filename=self.config.m4b_filename,
+                        bitrate=self.config.m4b_bitrate,
+                        cover=book_parser.get_book_cover(),
+                    )
+                    logger.info("Packaged m4b audiobook: %s", m4b_path)
+
         except KeyboardInterrupt:
             logger.info("Audiobook generation process interrupted by user (Ctrl+C).")
         except Exception as e:
             logger.exception(f"Error during audiobook generation: {e}")
         finally:
             logger.debug("AudiobookGenerator.run() method finished.")
-

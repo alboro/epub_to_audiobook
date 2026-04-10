@@ -39,6 +39,13 @@ class EpubBookParser(BaseBookParser):
             return self.book.get_metadata("DC", "creator")[0][0]
         return "Unknown"
 
+    def get_book_cover(self):
+        cover_items = list(self.book.get_items_of_type(ebooklib.ITEM_COVER))
+        if cover_items:
+            cover = cover_items[0]
+            return cover.get_content(), cover.media_type
+        return None
+
     def get_chapters(self, break_string) -> List[Tuple[str, str]]:
         chapters = []
         search_and_replaces = self.get_search_and_replaces()

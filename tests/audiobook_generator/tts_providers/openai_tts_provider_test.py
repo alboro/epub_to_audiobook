@@ -34,6 +34,23 @@ class TestOpenAiTtsProvider(unittest.TestCase):
         self.assertEqual(tts_provider.config.voice_name, "alloy")
         self.assertEqual(tts_provider.config.output_format, "mp3")
 
+    @patch.dict('os.environ', {}, clear=True)
+    def test_openai_compatible_base_url_without_real_key(self):
+        config = get_openai_config()
+        config.openai_base_url = "http://127.0.0.1:8000/v1"
+        tts_provider = get_tts_provider(config)
+        self.assertIsInstance(tts_provider, OpenAITTSProvider)
+        self.assertEqual(tts_provider.api_key, "dummy")
+
+    @patch.dict('os.environ', {'OPENAI_API_KEY': 'fake_key'})
+    def test_polling_requires_submit_url(self):
+        config = get_openai_config()
+        config.openai_enable_polling = True
+        config.openai_submit_url = None
+        config.openai_status_url_template = "https://example.com/jobs/{job_id}"
+        with self.assertRaises(ValueError):
+            get_tts_provider(config)
+
 
 if __name__ == '__main__':
     unittest.main()

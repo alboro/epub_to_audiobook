@@ -10,6 +10,10 @@ class GeneralConfig:
         self.no_prompt = getattr(args, 'no_prompt', None)
         self.worker_count = getattr(args, 'worker_count', None)
         self.use_pydub_merge = getattr(args, 'use_pydub_merge', None)
+        self.package_m4b = getattr(args, 'package_m4b', None)
+        self.m4b_filename = getattr(args, 'm4b_filename', None)
+        self.m4b_bitrate = getattr(args, 'm4b_bitrate', None)
+        self.ffmpeg_path = getattr(args, 'ffmpeg_path', None)
 
         # Book parser specific arguments
         self.title_mode = getattr(args, 'title_mode', None)
@@ -26,10 +30,33 @@ class GeneralConfig:
         self.voice_name = getattr(args, 'voice_name', None)
         self.output_format = getattr(args, 'output_format', None)
         self.model_name = getattr(args, 'model_name', None)
+        self.openai_api_key = getattr(args, 'openai_api_key', None)
+        self.openai_base_url = getattr(args, 'openai_base_url', None)
+        self.openai_max_chars = getattr(args, 'openai_max_chars', None)
+        self.openai_enable_polling = getattr(args, 'openai_enable_polling', None)
+        self.openai_submit_url = getattr(args, 'openai_submit_url', None)
+        self.openai_status_url_template = getattr(args, 'openai_status_url_template', None)
+        self.openai_download_url_template = getattr(args, 'openai_download_url_template', None)
+        self.openai_job_id_path = getattr(args, 'openai_job_id_path', None)
+        self.openai_job_status_path = getattr(args, 'openai_job_status_path', None)
+        self.openai_job_download_url_path = getattr(args, 'openai_job_download_url_path', None)
+        self.openai_job_done_values = getattr(args, 'openai_job_done_values', None)
+        self.openai_job_failed_values = getattr(args, 'openai_job_failed_values', None)
+        self.openai_poll_interval = getattr(args, 'openai_poll_interval', None)
+        self.openai_poll_timeout = getattr(args, 'openai_poll_timeout', None)
 
         # OpenAI specific arguments
         self.instructions = getattr(args, 'instructions', None)
         self.speed = getattr(args, 'speed', None)
+
+        # Normalizer specific arguments
+        self.normalize = getattr(args, 'normalize', None)
+        self.normalize_provider = getattr(args, 'normalize_provider', None)
+        self.normalize_model = getattr(args, 'normalize_model', None)
+        self.normalize_prompt_file = getattr(args, 'normalize_prompt_file', None)
+        self.normalize_api_key = getattr(args, 'normalize_api_key', None)
+        self.normalize_base_url = getattr(args, 'normalize_base_url', None)
+        self.normalize_max_chars = getattr(args, 'normalize_max_chars', None)
 
         # TTS provider: Azure & Edge TTS specific arguments
         self.break_duration = getattr(args, 'break_duration', None)

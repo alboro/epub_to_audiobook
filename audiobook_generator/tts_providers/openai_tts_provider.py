@@ -1,11 +1,12 @@
 import io
 import logging
 import math
-import tempfile
 import os
-from pydub import AudioSegment
+import time
+from urllib.parse import urljoin
 
 from openai import OpenAI
+import requests
 
 from audiobook_generator.core.audio_tags import AudioTags
 from audiobook_generator.config.general_config import GeneralConfig
@@ -53,22 +54,39 @@ class OpenAITTSProvider(BaseTTSProvider):
         config.speed = config.speed or 1.0
         config.instructions = config.instructions or None
         config.output_format = config.output_format or "mp3"
+        config.openai_max_chars = 1800 if config.openai_max_chars is None else config.openai_max_chars
+        config.openai_job_id_path = config.openai_job_id_path or "id"
+        config.openai_job_status_path = config.openai_job_status_path or "status"
+        config.openai_job_download_url_path = config.openai_job_download_url_path or "download_url"
+        config.openai_job_done_values = config.openai_job_done_values or "done,completed,succeeded,success"
+        config.openai_job_failed_values = config.openai_job_failed_values or "failed,error,cancelled"
+        config.openai_poll_interval = config.openai_poll_interval or 120
+        config.openai_poll_timeout = config.openai_poll_timeout or 14400
 
         self.price = get_price(config.model_name)
         super().__init__(config)
 
-        self.client = OpenAI(max_retries=4)  # User should set OPENAI_API_KEY environment variable
+        self.base_url = config.openai_base_url or os.getenv("OPENAI_BASE_URL")
+        self.api_key = config.openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key and self.base_url:
+            self.api_key = "dummy"
+
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            max_retries=4,
+        )
+        self.http_session = requests.Session()
+        if self.api_key:
+            self.http_session.headers["Authorization"] = f"Bearer {self.api_key}"
+        self.http_session.headers["Content-Type"] = "application/json"
 
     def __str__(self) -> str:
         return super().__str__()
 
     def text_to_speech(self, text: str, output_file: str, audio_tags: AudioTags):
-        # Reason: The max num of input tokens is 2000 for gpt-4o-mini-tts https://platform.openai.com/docs/models/gpt-4o-mini-tts. One token is ~4 chars in English but ~1 word/char in Chinese.
-        # So we reduce the max num of chars from 4000 to 1800 to avoid the input tokens limit.
-        # TODO: detect the language and set the max num of chars accordingly.
-        max_chars = 1800
-
-        text_chunks = split_text(text, max_chars, self.config.language)
+        max_chars = self.config.openai_max_chars
+        text_chunks = [text] if max_chars is not None and max_chars <= 0 else split_text(text, max_chars, self.config.language)
 
         audio_segments = []
         chunk_ids = []
@@ -82,22 +100,7 @@ class OpenAITTSProvider(BaseTTSProvider):
                 f"Processing {chunk_id}, length={len(chunk)}, text=[{chunk}]"
             )
 
-            # NO retry for OpenAI TTS because SDK has built-in retry logic
-            response = self.client.audio.speech.create(
-                model=self.config.model_name,
-                voice=self.config.voice_name,
-                speed=self.config.speed,
-                instructions=self.config.instructions,
-                input=chunk,
-                response_format=self.config.output_format,
-            )
-
-            # Log response details
-            logger.debug(f"Remote server response: status_code={response.response.status_code}, "
-                         f"size={len(response.content)} bytes, "
-                         f"content={response.content[:128]}...")
-
-            audio_segments.append(io.BytesIO(response.content))
+            audio_segments.append(io.BytesIO(self._synthesize_chunk(chunk, chunk_id)))
             chunk_ids.append(chunk_id)
 
         # Use utility function to merge audio segments
@@ -118,6 +121,137 @@ class OpenAITTSProvider(BaseTTSProvider):
             raise ValueError(f"OpenAI: Unsupported speed: {self.config.speed}")
         if self.config.instructions and len(self.config.instructions) > 0 and self.config.model_name != "gpt-4o-mini-tts":
             raise ValueError(f"OpenAI: Instructions are only supported for 'gpt-4o-mini-tts' model")
+        if self.config.openai_enable_polling:
+            if not self.config.openai_submit_url:
+                raise ValueError("OpenAI polling mode requires --openai-submit-url")
+            if not self.config.openai_status_url_template:
+                raise ValueError("OpenAI polling mode requires --openai-status-url-template")
 
     def estimate_cost(self, total_chars):
         return math.ceil(total_chars / 1000) * self.price
+
+    def _synthesize_chunk(self, chunk: str, chunk_id: str) -> bytes:
+        if self.config.openai_enable_polling:
+            return self._synthesize_chunk_with_polling(chunk, chunk_id)
+        return self._synthesize_chunk_sync(chunk)
+
+    def _synthesize_chunk_sync(self, chunk: str) -> bytes:
+        response = self.client.audio.speech.create(
+            model=self.config.model_name,
+            voice=self.config.voice_name,
+            speed=self.config.speed,
+            instructions=self.config.instructions,
+            input=chunk,
+            response_format=self.config.output_format,
+        )
+
+        logger.debug(
+            "Remote server response: status_code=%s, size=%s bytes, content=%s...",
+            response.response.status_code,
+            len(response.content),
+            response.content[:128],
+        )
+        return response.content
+
+    def _synthesize_chunk_with_polling(self, chunk: str, chunk_id: str) -> bytes:
+        submit_url = self._resolve_url(self.config.openai_submit_url)
+        payload = {
+            "model": self.config.model_name,
+            "voice": self.config.voice_name,
+            "speed": self.config.speed,
+            "instructions": self.config.instructions,
+            "input": chunk,
+            "response_format": self.config.output_format,
+        }
+        logger.info("Submitting polling TTS job for %s to %s", chunk_id, submit_url)
+        submit_response = self.http_session.post(submit_url, json=payload, timeout=120)
+        submit_response.raise_for_status()
+        submit_json = submit_response.json()
+        job_id = self._extract_json_path(submit_json, self.config.openai_job_id_path)
+        if not job_id:
+            raise RuntimeError(
+                f"Polling TTS submit response did not include job id at path '{self.config.openai_job_id_path}'"
+            )
+
+        done_values = self._split_csv(self.config.openai_job_done_values)
+        failed_values = self._split_csv(self.config.openai_job_failed_values)
+        poll_started = time.monotonic()
+        last_status = None
+
+        while True:
+            if time.monotonic() - poll_started > self.config.openai_poll_timeout:
+                raise TimeoutError(
+                    f"Polling TTS job '{job_id}' did not finish within {self.config.openai_poll_timeout} seconds"
+                )
+
+            status_url = self._format_template(self.config.openai_status_url_template, job_id)
+            logger.info("Polling TTS job %s at %s", job_id, status_url)
+            status_response = self.http_session.get(status_url, timeout=120)
+            status_response.raise_for_status()
+            status_json = status_response.json()
+
+            status_value = str(
+                self._extract_json_path(status_json, self.config.openai_job_status_path)
+            ).strip().lower()
+            if status_value and status_value != last_status:
+                logger.info("Polling TTS job %s status changed to '%s'", job_id, status_value)
+                last_status = status_value
+
+            if status_value in done_values:
+                download_url = None
+                if self.config.openai_download_url_template:
+                    download_url = self._format_template(
+                        self.config.openai_download_url_template,
+                        job_id,
+                    )
+                else:
+                    download_url = self._extract_json_path(
+                        status_json,
+                        self.config.openai_job_download_url_path,
+                    )
+                if not download_url:
+                    raise RuntimeError(
+                        "Polling TTS job finished but no download URL was found. "
+                        f"Set --openai-download-url-template or adjust --openai-job-download-url-path."
+                    )
+                logger.info("Downloading completed TTS audio for job %s from %s", job_id, download_url)
+                download_response = self.http_session.get(
+                    self._resolve_url(download_url),
+                    timeout=600,
+                )
+                download_response.raise_for_status()
+                return download_response.content
+
+            if status_value in failed_values:
+                raise RuntimeError(f"Polling TTS job '{job_id}' failed with status '{status_value}'")
+
+            time.sleep(self.config.openai_poll_interval)
+
+    def _resolve_url(self, url: str) -> str:
+        if url.startswith(("http://", "https://")) or not self.base_url:
+            return url
+        return urljoin(self.base_url.rstrip("/") + "/", url.lstrip("/"))
+
+    @staticmethod
+    def _extract_json_path(data, path: str):
+        current = data
+        for part in path.split("."):
+            if isinstance(current, list):
+                try:
+                    current = current[int(part)]
+                except (TypeError, ValueError, IndexError):
+                    return None
+            elif isinstance(current, dict):
+                current = current.get(part)
+            else:
+                return None
+            if current is None:
+                return None
+        return current
+
+    @staticmethod
+    def _split_csv(value: str):
+        return {item.strip().lower() for item in value.split(",") if item.strip()}
+
+    def _format_template(self, template: str, job_id: str) -> str:
+        return self._resolve_url(template.format(job_id=job_id))
