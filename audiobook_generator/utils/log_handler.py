@@ -1,5 +1,6 @@
 import logging
 import datetime
+import sys
 from pathlib import Path
 
 def get_formatter(is_worker):
@@ -14,13 +15,21 @@ def get_formatter(is_worker):
 
 def setup_logging(log_level, log_file=None, is_worker=False):
     formatter = get_formatter(is_worker)
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, OSError, ValueError):
+                pass
 
     root_logger = logging.getLogger()
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     root_logger.setLevel(log_level)
 
-    console_handler = logging.StreamHandler()
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
@@ -30,7 +39,7 @@ def setup_logging(log_level, log_file=None, is_worker=False):
     # Ensure the directory for the log file exists
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
 
-    file_handler = logging.FileHandler(log_file)
+    file_handler = logging.FileHandler(log_file, encoding="utf-8-sig")
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
 

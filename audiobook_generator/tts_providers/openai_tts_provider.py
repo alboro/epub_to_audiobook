@@ -15,6 +15,7 @@ from audiobook_generator.tts_providers.base_tts_provider import BaseTTSProvider
 
 
 logger = logging.getLogger(__name__)
+TRANSIENT_HTTP_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 
 
 def get_openai_supported_output_formats():
@@ -62,13 +63,15 @@ class OpenAITTSProvider(BaseTTSProvider):
         config.openai_job_failed_values = config.openai_job_failed_values or "failed,error,cancelled"
         config.openai_poll_interval = config.openai_poll_interval or 120
         config.openai_poll_timeout = config.openai_poll_timeout or 14400
+        config.openai_poll_request_timeout = config.openai_poll_request_timeout or 120
+        config.openai_poll_max_errors = config.openai_poll_max_errors or 10
 
         self.price = get_price(config.model_name)
         super().__init__(config)
 
         self.base_url = config.openai_base_url or os.getenv("OPENAI_BASE_URL")
         self.api_key = config.openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not self.api_key and self.base_url:
+        if not self.api_key:
             self.api_key = "dummy"
 
         self.client = OpenAI(
@@ -76,10 +79,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             base_url=self.base_url,
             max_retries=4,
         )
-        self.http_session = requests.Session()
-        if self.api_key:
-            self.http_session.headers["Authorization"] = f"Bearer {self.api_key}"
-        self.http_session.headers["Content-Type"] = "application/json"
+        self.http_session = self._build_http_session()
 
     def __str__(self) -> str:
         return super().__str__()
@@ -121,6 +121,10 @@ class OpenAITTSProvider(BaseTTSProvider):
             raise ValueError(f"OpenAI: Unsupported speed: {self.config.speed}")
         if self.config.instructions and len(self.config.instructions) > 0 and self.config.model_name != "gpt-4o-mini-tts":
             raise ValueError(f"OpenAI: Instructions are only supported for 'gpt-4o-mini-tts' model")
+        if self.config.openai_poll_request_timeout <= 0:
+            raise ValueError("OpenAI: openai_poll_request_timeout must be positive")
+        if self.config.openai_poll_max_errors < 0:
+            raise ValueError("OpenAI: openai_poll_max_errors must be zero or positive")
         if self.config.openai_enable_polling:
             if not self.config.openai_submit_url:
                 raise ValueError("OpenAI polling mode requires --openai-submit-url")
@@ -164,8 +168,13 @@ class OpenAITTSProvider(BaseTTSProvider):
             "response_format": self.config.output_format,
         }
         logger.info("Submitting polling TTS job for %s to %s", chunk_id, submit_url)
-        submit_response = self.http_session.post(submit_url, json=payload, timeout=120)
-        submit_response.raise_for_status()
+        submit_response = self._request_with_retries(
+            "POST",
+            submit_url,
+            operation=f"submit TTS job for {chunk_id}",
+            timeout=self.config.openai_poll_request_timeout,
+            json=payload,
+        )
         submit_json = submit_response.json()
         job_id = self._extract_json_path(submit_json, self.config.openai_job_id_path)
         if not job_id:
@@ -186,8 +195,12 @@ class OpenAITTSProvider(BaseTTSProvider):
 
             status_url = self._format_template(self.config.openai_status_url_template, job_id)
             logger.info("Polling TTS job %s at %s", job_id, status_url)
-            status_response = self.http_session.get(status_url, timeout=120)
-            status_response.raise_for_status()
+            status_response = self._request_with_retries(
+                "GET",
+                status_url,
+                operation=f"poll TTS job {job_id}",
+                timeout=self.config.openai_poll_request_timeout,
+            )
             status_json = status_response.json()
 
             status_value = str(
@@ -215,17 +228,73 @@ class OpenAITTSProvider(BaseTTSProvider):
                         f"Set --openai-download-url-template or adjust --openai-job-download-url-path."
                     )
                 logger.info("Downloading completed TTS audio for job %s from %s", job_id, download_url)
-                download_response = self.http_session.get(
+                download_response = self._request_with_retries(
+                    "GET",
                     self._resolve_url(download_url),
-                    timeout=600,
+                    operation=f"download TTS audio for job {job_id}",
+                    timeout=max(600, self.config.openai_poll_request_timeout),
                 )
-                download_response.raise_for_status()
                 return download_response.content
 
             if status_value in failed_values:
                 raise RuntimeError(f"Polling TTS job '{job_id}' failed with status '{status_value}'")
 
             time.sleep(self.config.openai_poll_interval)
+
+    def _build_http_session(self) -> requests.Session:
+        session = requests.Session()
+        if self.api_key:
+            session.headers["Authorization"] = f"Bearer {self.api_key}"
+        session.headers["Content-Type"] = "application/json"
+        return session
+
+    def _reset_http_session(self) -> None:
+        try:
+            self.http_session.close()
+        except Exception:
+            pass
+        self.http_session = self._build_http_session()
+
+    def _request_with_retries(self, method: str, url: str, *, operation: str, timeout: int, **kwargs):
+        max_attempts = max(1, int(self.config.openai_poll_max_errors) + 1)
+        headers = dict(kwargs.pop("headers", {}) or {})
+        headers.setdefault("Connection", "close")
+        headers.setdefault("Cache-Control", "no-cache")
+        kwargs["headers"] = headers
+
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self.http_session.request(method, url, timeout=timeout, **kwargs)
+                if response.status_code in TRANSIENT_HTTP_STATUS_CODES:
+                    raise requests.HTTPError(
+                        f"Transient HTTP {response.status_code} during {operation}",
+                        response=response,
+                    )
+                response.raise_for_status()
+                return response
+            except (requests.RequestException, ValueError) as exc:
+                last_error = exc
+                if attempt == max_attempts:
+                    break
+                self._reset_http_session()
+                delay = min(
+                    max(float(self.config.openai_poll_interval), 1.0),
+                    0.5 * (2 ** (attempt - 1)),
+                )
+                logger.warning(
+                    "%s failed on attempt %s/%s: %s. Retrying in %.1fs",
+                    operation,
+                    attempt,
+                    max_attempts,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
+
+        raise RuntimeError(
+            f"{operation} failed after {max_attempts} attempts: {last_error}"
+        ) from last_error
 
     def _resolve_url(self, url: str) -> str:
         if url.startswith(("http://", "https://")) or not self.base_url:

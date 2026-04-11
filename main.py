@@ -29,7 +29,7 @@ def handle_args():
     parser.add_argument(
         "--preview",
         action="store_true",
-        help="Enable preview mode. In preview mode, the script will not convert the text to speech. Instead, it will print the chapter index, titles, and character counts.",
+        help="Enable preview mode. The script will run parsing and normalization, save text artifacts, and stop before sending anything to TTS.",
     )
     parser.add_argument(
         "--no_prompt",
@@ -69,6 +69,15 @@ def handle_args():
         "--output_text",
         action="store_true",
         help="Enable Output Text. This will export a plain text file for each chapter specified and write the files to the output folder specified.",
+    )
+    parser.add_argument(
+        "--prepare_text",
+        action="store_true",
+        help="Prepare per-chapter UTF-8 text files for review and stop before TTS. If --normalize is enabled, the exported text is normalized first. Chapter text artifacts are also saved.",
+    )
+    parser.add_argument(
+        "--prepared_text_folder",
+        help="Use reviewed per-chapter .txt files from this folder as the TTS source instead of the raw text extracted from the EPUB.",
     )
     parser.add_argument(
         "--remove_endnotes",
@@ -226,12 +235,28 @@ def handle_args():
         type=int,
         help="Maximum time in seconds to wait for a polling TTS job before failing.",
     )
+    openai_tts_group.add_argument(
+        "--openai_poll_request_timeout",
+        default=120,
+        type=int,
+        help="HTTP timeout in seconds for each individual polling or download request (default: 120).",
+    )
+    openai_tts_group.add_argument(
+        "--openai_poll_max_errors",
+        default=10,
+        type=int,
+        help="How many consecutive transient polling/download HTTP errors to tolerate before failing (default: 10).",
+    )
 
     normalizer_group = parser.add_argument_group(title="normalizer specific")
     normalizer_group.add_argument(
         "--normalize",
         action="store_true",
-        help="Normalize chapter text with an LLM before sending it to TTS.",
+        help="Normalize chapter text before sending it to TTS.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_steps",
+        help="Comma-separated normalizer steps to apply in order. Example: simple_symbols,numbers_ru,tts_safe_split,llm",
     )
     normalizer_group.add_argument(
         "--normalize_provider",
@@ -245,7 +270,15 @@ def handle_args():
     )
     normalizer_group.add_argument(
         "--normalize_prompt_file",
+        help="Optional text file with a custom system prompt for the normalizer. Kept for backwards compatibility.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_system_prompt_file",
         help="Optional text file with a custom system prompt for the normalizer.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_user_prompt_file",
+        help="Optional text file with a custom user prompt template for the normalizer. Available placeholders: {chapter_title}, {text}.",
     )
     normalizer_group.add_argument(
         "--normalize_api_key",
@@ -260,6 +293,12 @@ def handle_args():
         default=4000,
         type=int,
         help="Maximum characters per normalization request. Use a negative value to disable local splitting.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_tts_safe_max_chars",
+        default=160,
+        type=int,
+        help="Maximum characters per sentence for the deterministic tts_safe_split normalizer (default: 160).",
     )
 
     edge_tts_group = parser.add_argument_group(title="edge specific")

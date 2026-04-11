@@ -36,29 +36,128 @@ class AudiobookGenerator:
     def __str__(self) -> str:
         return f"{self.config}"
 
+    def _chapter_text_path(self, base_dir, idx, title):
+        safe_txt_name = make_safe_filename(
+            title=title,
+            idx=idx,
+            output_dir=base_dir,
+            ext=".txt",
+            collision_check=False,
+        )
+        return os.path.join(base_dir, safe_txt_name)
+
+    def _write_chapter_text(self, base_dir, idx, title, text):
+        os.makedirs(base_dir, exist_ok=True)
+        text_file = self._chapter_text_path(base_dir, idx, title)
+        with open(text_file, "w", encoding="utf-8", newline="\n") as file_handle:
+            file_handle.write(text)
+        return text_file
+
+    def _chapter_artifact_dir(self, idx, title):
+        artifacts_root = os.path.join(self.config.output_folder, "_chapter_artifacts")
+        safe_name = make_safe_filename(
+            title=title,
+            idx=idx,
+            output_dir=artifacts_root,
+            ext=".txt",
+            collision_check=False,
+        )
+        if safe_name.lower().endswith(".txt"):
+            safe_name = safe_name[:-4]
+        return os.path.join(artifacts_root, safe_name)
+
+    def _write_chapter_artifact(self, artifact_dir, filename, text):
+        os.makedirs(artifact_dir, exist_ok=True)
+        path = os.path.join(artifact_dir, filename)
+        with open(path, "w", encoding="utf-8", newline="\n") as file_handle:
+            file_handle.write(text)
+        return path
+
+    def _save_chapter_artifacts(
+        self,
+        *,
+        idx,
+        title,
+        raw_text,
+        source_text,
+        prepared_text_path,
+        normalizer_trace,
+        final_text,
+        final_label,
+    ):
+        artifact_dir = self._chapter_artifact_dir(idx, title)
+        source_kind = "prepared_text" if prepared_text_path else "raw_epub"
+        normalize_steps = self.config.normalize_steps or self.config.normalize_provider or "disabled"
+        manifest_lines = [
+            f"chapter_index: {idx}",
+            f"chapter_title: {title}",
+            f"source_kind: {source_kind}",
+            f"prepared_text_path: {prepared_text_path or ''}",
+            f"language: {self.config.language}",
+            f"tts_provider: {self.config.tts}",
+            f"tts_model: {self.config.model_name}",
+            f"voice_name: {self.config.voice_name}",
+            f"normalize_enabled: {bool(self.config.normalize)}",
+            f"normalize_steps: {normalize_steps}",
+            f"raw_chars: {len(raw_text)}",
+            f"source_chars: {len(source_text)}",
+            f"final_chars: {len(final_text)}",
+            f"final_label: {final_label}",
+        ]
+        self._write_chapter_artifact(artifact_dir, "00_manifest.txt", "\n".join(manifest_lines) + "\n")
+        self._write_chapter_artifact(artifact_dir, "01_raw_parser_text.txt", raw_text)
+        self._write_chapter_artifact(artifact_dir, "02_tts_source_text.txt", source_text)
+
+        for step_index, (step_name, step_text) in enumerate(normalizer_trace, start=1):
+            safe_step_name = step_name.replace(" ", "_").replace("/", "_")
+            filename = f"{step_index * 10:02d}_step_{step_index}_{safe_step_name}.txt"
+            self._write_chapter_artifact(artifact_dir, filename, step_text)
+
+        self._write_chapter_artifact(artifact_dir, f"99_{final_label}.txt", final_text)
+        logger.info("Saved chapter %s text artifacts to %s", idx, artifact_dir)
+        return artifact_dir
+
+    def _normalize_with_trace(self, normalizer, text, title):
+        if not normalizer:
+            return text, []
+        if hasattr(normalizer, "normalize_with_trace"):
+            return normalizer.normalize_with_trace(text, chapter_title=title)
+        normalized = normalizer.normalize(text, chapter_title=title)
+        return normalized, [(getattr(normalizer, "get_step_name", lambda: normalizer.__class__.__name__.lower())(), normalized)]
+
+    def _load_prepared_text(self, idx, title):
+        if not self.config.prepared_text_folder:
+            return None, None
+
+        text_file = self._chapter_text_path(self.config.prepared_text_folder, idx, title)
+        if not os.path.exists(text_file):
+            raise FileNotFoundError(
+                f"Reviewed text file not found for chapter {idx}: {text_file}"
+            )
+
+        with open(text_file, "r", encoding="utf-8") as file_handle:
+            text = file_handle.read().strip()
+
+        if not text:
+            raise ValueError(f"Reviewed text file is empty for chapter {idx}: {text_file}")
+
+        return text, text_file
+
     def process_chapter(self, idx, title, text, book_parser):
         """Process a single chapter: write text (if needed) and convert to audio."""
         try:
             logger.info(f"Processing chapter {idx}: {title}")
             tts_provider = get_tts_provider(self.config)
             normalizer = get_normalizer(self.config) if self.config.normalize else None
+            prepared_text, prepared_text_path = self._load_prepared_text(idx, title)
+            source_text = prepared_text if prepared_text is not None else text
+
+            if prepared_text_path:
+                logger.info("Using reviewed text for chapter %s from %s", idx, prepared_text_path)
 
             # Save chapter text if required
             if self.config.output_text:
-                safe_txt_name = make_safe_filename(
-                    title=title,
-                    idx=idx,
-                    output_dir=self.config.output_folder,
-                    ext=".txt",
-                    collision_check=False,
-                )
-                text_file = os.path.join(self.config.output_folder, safe_txt_name)
-                with open(text_file, "w", encoding="utf-8") as f:
-                    f.write(text)
-
-            # Skip audio generation in preview mode
-            if self.config.preview:
-                return True
+                self._write_chapter_text(self.config.output_folder, idx, title, source_text)
 
             # Generate audio file (safe, length-limited, cross-platform)
             audio_ext = "." + tts_provider.get_output_file_extension()
@@ -74,9 +173,32 @@ class AudiobookGenerator:
             audio_tags = AudioTags(
                 title, book_parser.get_book_author(), book_parser.get_book_title(), idx
             )
-            text_for_tts = text
-            if normalizer:
-                text_for_tts = normalizer.normalize(text, chapter_title=title)
+            text_for_tts, tts_trace = self._normalize_with_trace(normalizer, source_text, title)
+            final_label = "tts_input"
+            if self.config.prepare_text:
+                final_label = "prepared_text"
+            elif self.config.preview:
+                final_label = "preview_tts_input"
+            self._save_chapter_artifacts(
+                idx=idx,
+                title=title,
+                raw_text=text,
+                source_text=source_text,
+                prepared_text_path=prepared_text_path,
+                normalizer_trace=tts_trace,
+                final_text=text_for_tts,
+                final_label=final_label,
+            )
+
+            if self.config.prepare_text:
+                text_file = self._write_chapter_text(self.config.output_folder, idx, title, text_for_tts)
+                logger.info("Prepared chapter %s text for review: %s", idx, text_file)
+                return True
+
+            if self.config.preview:
+                text_file = self._write_chapter_text(self.config.output_folder, idx, title, text_for_tts)
+                logger.info("Preview stopped before TTS for chapter %s; final text saved to %s", idx, text_file)
+                return True
 
             tts_provider.text_to_speech(text_for_tts, output_file, audio_tags)
 
@@ -99,6 +221,18 @@ class AudiobookGenerator:
             tts_provider = get_tts_provider(self.config)
 
             os.makedirs(self.config.output_folder, exist_ok=True)
+            if self.config.prepared_text_folder and not os.path.isdir(self.config.prepared_text_folder):
+                raise FileNotFoundError(
+                    f"Prepared text folder not found: {self.config.prepared_text_folder}"
+                )
+            if self.config.prepared_text_folder and self.config.normalize:
+                logger.warning(
+                    "Both --prepared_text_folder and --normalize are enabled. Reviewed text will be normalized again before TTS."
+                )
+            if self.config.prepare_text:
+                logger.info("Prepare-text mode enabled. Chapters will be exported for review and TTS will be skipped.")
+            if self.config.prepare_text and self.config.package_m4b:
+                logger.warning("Ignoring --package_m4b because --prepare_text is enabled.")
             chapters = book_parser.get_chapters(tts_provider.get_break_string())
             # Filter out empty or very short chapters
             chapters = [(title, text) for title, text in chapters if text.strip()]
@@ -130,11 +264,14 @@ class AudiobookGenerator:
                 chapters[self.config.chapter_start - 1 : self.config.chapter_end]
             )
             logger.info(f"Total characters in selected book chapters: {total_characters}")
-            rough_price = tts_provider.estimate_cost(total_characters)
-            logger.info(f"Estimate book voiceover would cost you roughly: ${rough_price:.2f}\n")
+            if not self.config.prepare_text:
+                rough_price = tts_provider.estimate_cost(total_characters)
+                logger.info(f"Estimate book voiceover would cost you roughly: ${rough_price:.2f}\n")
 
             # Prompt user to continue if not in preview mode
-            if self.config.no_prompt:
+            if self.config.prepare_text:
+                logger.info("Skipping prompt in prepare-text mode")
+            elif self.config.no_prompt:
                 logger.info("Skipping prompt as passed parameter no_prompt")
             elif self.config.preview:
                 logger.info("Skipping prompt as in preview mode")
@@ -194,12 +331,15 @@ class AudiobookGenerator:
                 for idx, title in failed_chapters:
                     logger.warning(f"  - Chapter {idx}: {title}")
                 logger.info(f"Conversion completed with {len(failed_chapters)} failed chapters. Check your output directory: {self.config.output_folder} and log file: {self.config.log_file} for more details.")
+            elif self.config.prepare_text:
+                logger.info(f"All chapters prepared for review successfully. Check your output directory: {self.config.output_folder}")
             else:
                 logger.info(f"All chapters converted successfully. Check your output directory: {self.config.output_folder}")
 
             if (
                 self.config.package_m4b
                 and not self.config.preview
+                and not self.config.prepare_text
                 and not failed_chapters
             ):
                 chapter_files = [path for _, _, path in chapter_output_records if os.path.exists(path)]

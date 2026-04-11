@@ -5,6 +5,8 @@ class GeneralConfig:
         self.output_folder = getattr(args, 'output_folder', None)
         self.preview = getattr(args, 'preview', None)
         self.output_text = getattr(args, 'output_text', None)
+        self.prepare_text = getattr(args, 'prepare_text', None)
+        self.prepared_text_folder = getattr(args, 'prepared_text_folder', None)
         self.log = getattr(args, 'log', None)
         self.log_file = None
         self.no_prompt = getattr(args, 'no_prompt', None)
@@ -44,6 +46,8 @@ class GeneralConfig:
         self.openai_job_failed_values = getattr(args, 'openai_job_failed_values', None)
         self.openai_poll_interval = getattr(args, 'openai_poll_interval', None)
         self.openai_poll_timeout = getattr(args, 'openai_poll_timeout', None)
+        self.openai_poll_request_timeout = getattr(args, 'openai_poll_request_timeout', None)
+        self.openai_poll_max_errors = getattr(args, 'openai_poll_max_errors', None)
 
         # OpenAI specific arguments
         self.instructions = getattr(args, 'instructions', None)
@@ -51,12 +55,16 @@ class GeneralConfig:
 
         # Normalizer specific arguments
         self.normalize = getattr(args, 'normalize', None)
+        self.normalize_steps = getattr(args, 'normalize_steps', None)
         self.normalize_provider = getattr(args, 'normalize_provider', None)
         self.normalize_model = getattr(args, 'normalize_model', None)
         self.normalize_prompt_file = getattr(args, 'normalize_prompt_file', None)
+        self.normalize_system_prompt_file = getattr(args, 'normalize_system_prompt_file', None)
+        self.normalize_user_prompt_file = getattr(args, 'normalize_user_prompt_file', None)
         self.normalize_api_key = getattr(args, 'normalize_api_key', None)
         self.normalize_base_url = getattr(args, 'normalize_base_url', None)
         self.normalize_max_chars = getattr(args, 'normalize_max_chars', None)
+        self.normalize_tts_safe_max_chars = getattr(args, 'normalize_tts_safe_max_chars', None)
 
         # TTS provider: Azure & Edge TTS specific arguments
         self.break_duration = getattr(args, 'break_duration', None)

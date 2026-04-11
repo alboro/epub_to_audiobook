@@ -45,3 +45,7 @@ piper_models/*
 test.py
 
 logs/
+.local/
+.venv/
+out/
+input/

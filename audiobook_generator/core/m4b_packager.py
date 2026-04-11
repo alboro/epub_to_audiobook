@@ -130,7 +130,13 @@ def package_m4b(
         command.append(output_path)
 
         logger.info("Packaging audiobook to m4b: %s", output_path)
-        completed = subprocess.run(command, capture_output=True, text=True)
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         if completed.returncode != 0:
             raise RuntimeError(
                 "ffmpeg failed to package m4b: "
