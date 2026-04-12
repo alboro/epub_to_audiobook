@@ -49,6 +49,17 @@ Useful options:
 - `--voice-name reference_long`
 - `--normalize-system-prompt-file /path/to/ru_prompt.txt`
 - `--prepare-text`
+- `--prepared-text-folder /path/to/reviewed_text`
+
+Review-first workflow with reused chapter files:
+
+1. Generate reviewable chapter text:
+   `python recipes/win_ru_xtts/run_book.py "/path/to/book.epub" --language ru-RU --prepare-text --output-dir /path/to/run`
+2. Edit the generated per-chapter `.txt` files in that output folder.
+3. Synthesize from the reviewed text without re-normalizing it:
+   `python recipes/win_ru_xtts/run_book.py "/path/to/book.epub" --language ru-RU --prepared-text-folder /path/to/run --output-dir /path/to/final_audio`
+
+If you do want to run the normalizer chain on the reviewed text again, add `--normalize-reviewed-text`.
 
 Personal machine-specific wrappers should live outside the repo or under an ignored folder such as `.local/`.
 

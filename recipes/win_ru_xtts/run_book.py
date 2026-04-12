@@ -37,6 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--language", default="ru-RU", help="Book language. Default: ru-RU.")
     parser.add_argument("--output-dir", help="Optional output directory.")
     parser.add_argument(
+        "--prepared-text-folder",
+        help=(
+            "Optional folder with previously prepared per-chapter .txt files. "
+            "When this is set, the recipe uses those files as the TTS source instead of reparsing raw chapter text."
+        ),
+    )
+    parser.add_argument(
         "--voice-name",
         default=DEFAULT_VOICE_NAME,
         help=f"Voice name/prefix. Default: {DEFAULT_VOICE_NAME}.",
@@ -88,6 +95,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--preview", action="store_true", help="Run parsing and normalization only, then stop before TTS.")
     parser.add_argument("--prepare-text", action="store_true", help="Prepare reviewed text instead of generating audio.")
+    parser.add_argument(
+        "--normalize-reviewed-text",
+        action="store_true",
+        help=(
+            "If --prepared-text-folder is used, run the normalizer chain on those reviewed files again "
+            "before preview or TTS. By default reviewed text is used as-is."
+        ),
+    )
     parser.add_argument("--package-m4b", action="store_true", help="Force m4b packaging. Enabled by default unless --prepare-text is set.")
     return parser
 
@@ -151,6 +166,13 @@ def main() -> int:
     book_path = Path(args.book_path).expanduser().resolve()
     if not book_path.is_file():
         raise FileNotFoundError(f"Book not found: {book_path}")
+    prepared_text_folder = None
+    if args.prepared_text_folder:
+        prepared_text_folder = Path(args.prepared_text_folder).expanduser().resolve()
+        if not prepared_text_folder.is_dir():
+            raise FileNotFoundError(f"Prepared text folder not found: {prepared_text_folder}")
+    if args.prepare_text and prepared_text_folder is not None:
+        raise ValueError("--prepare-text and --prepared-text-folder cannot be used together.")
 
     output_dir = resolve_output_dir(project_root, book_path, args.output_dir)
     ffmpeg_path = resolve_ffmpeg(args.ffmpeg_path)
@@ -198,22 +220,30 @@ def main() -> int:
         str(args.poll_timeout),
         "--openai_max_chars",
         "0",
-        "--normalize",
-        "--normalize_steps",
-        args.normalize_steps,
-        "--normalize_model",
-        args.normalize_model,
-        "--normalize_max_chars",
-        str(args.normalize_max_chars),
-        "--normalize_tts_safe_max_chars",
-        str(args.normalize_tts_safe_max_chars),
         "--ffmpeg_path",
         ffmpeg_path,
     ]
 
-    if args.normalize_base_url:
+    use_normalization = prepared_text_folder is None or args.normalize_reviewed_text
+    if use_normalization:
+        command += [
+            "--normalize",
+            "--normalize_steps",
+            args.normalize_steps,
+            "--normalize_model",
+            args.normalize_model,
+            "--normalize_max_chars",
+            str(args.normalize_max_chars),
+            "--normalize_tts_safe_max_chars",
+            str(args.normalize_tts_safe_max_chars),
+        ]
+
+    if prepared_text_folder is not None:
+        command += ["--prepared_text_folder", str(prepared_text_folder)]
+
+    if use_normalization and args.normalize_base_url:
         command += ["--normalize_base_url", args.normalize_base_url]
-    if args.normalize_system_prompt_file:
+    if use_normalization and args.normalize_system_prompt_file:
         command += ["--normalize_system_prompt_file", args.normalize_system_prompt_file]
 
     if args.prepare_text:
@@ -227,12 +257,17 @@ def main() -> int:
     safe_print(f"Language: {args.language}")
     safe_print(f"Chapter mode: {args.chapter_mode}")
     safe_print(f"Output: {output_dir}")
+    if prepared_text_folder is not None:
+        safe_print(f"Prepared text folder: {prepared_text_folder}")
     safe_print(f"Voice: {args.voice_name}")
     safe_print(f"TTS server: {args.tts_base_url}")
-    safe_print(f"Normalizer steps: {args.normalize_steps}")
-    if args.normalize_base_url:
+    if use_normalization:
+        safe_print(f"Normalizer steps: {args.normalize_steps}")
+    else:
+        safe_print("Normalizer steps: skipped for reviewed text")
+    if use_normalization and args.normalize_base_url:
         safe_print(f"Normalizer base URL: {args.normalize_base_url}")
-    if args.normalize_system_prompt_file:
+    if use_normalization and args.normalize_system_prompt_file:
         safe_print(f"Prompt file: {args.normalize_system_prompt_file}")
     safe_print(f"ffmpeg: {ffmpeg_path}")
     if args.prepare_text:
