@@ -9,10 +9,24 @@ from datetime import datetime
 from pathlib import Path
 
 
-DEFAULT_NORMALIZE_STEPS = "simple_symbols,numbers_ru,llm,simple_symbols,tts_safe_split"
+DEFAULT_NORMALIZE_STEPS = (
+    "simple_symbols,initials_ru,pronunciation_exceptions_ru,"
+    "numbers_ru,stress_words_ru,llm,simple_symbols,"
+    "initials_ru,pronunciation_exceptions_ru,stress_words_ru,proper_nouns_ru,tts_safe_split"
+)
 DEFAULT_NORMALIZE_MODEL = "gpt-5.4"
 DEFAULT_VOICE_NAME = "reference_long"
 DEFAULT_TTS_BASE_URL = "http://127.0.0.1:8020"
+DEFAULT_CHAPTER_MODE = "toc_sections"
+
+
+def safe_print(message: str) -> None:
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        encoded = message.encode("utf-8", errors="replace")
+        sys.stdout.buffer.write(encoded + b"\n")
+        sys.stdout.buffer.flush()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -64,6 +78,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--poll-interval", type=int, default=5, help="Polling interval in seconds. Default: 5.")
     parser.add_argument("--poll-timeout", type=int, default=14400, help="Polling timeout in seconds. Default: 14400.")
     parser.add_argument("--ffmpeg-path", help="Optional ffmpeg path. Defaults to auto-detection.")
+    parser.add_argument("--chapter-start", type=int, default=1, help="Chapter start index. Default: 1.")
+    parser.add_argument("--chapter-end", type=int, default=-1, help="Chapter end index. Default: -1 (to the end).")
+    parser.add_argument(
+        "--chapter-mode",
+        default=DEFAULT_CHAPTER_MODE,
+        choices=["documents", "toc_sections"],
+        help=f"EPUB chapter grouping mode. Default: {DEFAULT_CHAPTER_MODE}.",
+    )
+    parser.add_argument("--preview", action="store_true", help="Run parsing and normalization only, then stop before TTS.")
     parser.add_argument("--prepare-text", action="store_true", help="Prepare reviewed text instead of generating audio.")
     parser.add_argument("--package-m4b", action="store_true", help="Force m4b packaging. Enabled by default unless --prepare-text is set.")
     return parser
@@ -141,8 +164,14 @@ def main() -> int:
         "openai",
         "--language",
         args.language,
+        "--chapter_mode",
+        args.chapter_mode,
         "--worker_count",
         str(args.worker_count),
+        "--chapter_start",
+        str(args.chapter_start),
+        "--chapter_end",
+        str(args.chapter_end),
         "--no_prompt",
         "--model_name",
         "tts_models/multilingual/multi-dataset/xtts_v2",
@@ -189,21 +218,29 @@ def main() -> int:
 
     if args.prepare_text:
         command.append("--prepare_text")
+    elif args.preview:
+        command.append("--preview")
     else:
         command.append("--package_m4b")
 
-    print(f"Book: {book_path}")
-    print(f"Language: {args.language}")
-    print(f"Output: {output_dir}")
-    print(f"Voice: {args.voice_name}")
-    print(f"TTS server: {args.tts_base_url}")
-    print(f"Normalizer steps: {args.normalize_steps}")
+    safe_print(f"Book: {book_path}")
+    safe_print(f"Language: {args.language}")
+    safe_print(f"Chapter mode: {args.chapter_mode}")
+    safe_print(f"Output: {output_dir}")
+    safe_print(f"Voice: {args.voice_name}")
+    safe_print(f"TTS server: {args.tts_base_url}")
+    safe_print(f"Normalizer steps: {args.normalize_steps}")
     if args.normalize_base_url:
-        print(f"Normalizer base URL: {args.normalize_base_url}")
+        safe_print(f"Normalizer base URL: {args.normalize_base_url}")
     if args.normalize_system_prompt_file:
-        print(f"Prompt file: {args.normalize_system_prompt_file}")
-    print(f"ffmpeg: {ffmpeg_path}")
-    print("Mode: prepare_text" if args.prepare_text else "Mode: full audiobook")
+        safe_print(f"Prompt file: {args.normalize_system_prompt_file}")
+    safe_print(f"ffmpeg: {ffmpeg_path}")
+    if args.prepare_text:
+        safe_print("Mode: prepare_text")
+    elif args.preview:
+        safe_print("Mode: preview")
+    else:
+        safe_print("Mode: full audiobook")
 
     return subprocess.call(command, cwd=project_root, env=os.environ.copy())
 

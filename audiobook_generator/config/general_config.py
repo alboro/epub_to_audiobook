@@ -19,6 +19,7 @@ class GeneralConfig:
 
         # Book parser specific arguments
         self.title_mode = getattr(args, 'title_mode', None)
+        self.chapter_mode = getattr(args, 'chapter_mode', None)
         self.newline_mode = getattr(args, 'newline_mode', None)
         self.chapter_start = getattr(args, 'chapter_start', None)
         self.chapter_end = getattr(args, 'chapter_end', None)
@@ -65,6 +66,19 @@ class GeneralConfig:
         self.normalize_base_url = getattr(args, 'normalize_base_url', None)
         self.normalize_max_chars = getattr(args, 'normalize_max_chars', None)
         self.normalize_tts_safe_max_chars = getattr(args, 'normalize_tts_safe_max_chars', None)
+        self.normalize_pronunciation_exceptions_file = getattr(
+            args, 'normalize_pronunciation_exceptions_file', None
+        )
+        self.normalize_stress_exceptions_file = getattr(
+            args, 'normalize_stress_exceptions_file', None
+        )
+        self.normalize_tsnorm_stress_yo = getattr(args, 'normalize_tsnorm_stress_yo', None)
+        self.normalize_tsnorm_stress_monosyllabic = getattr(
+            args, 'normalize_tsnorm_stress_monosyllabic', None
+        )
+        self.normalize_tsnorm_min_word_length = getattr(
+            args, 'normalize_tsnorm_min_word_length', None
+        )
 
         # TTS provider: Azure & Edge TTS specific arguments
         self.break_duration = getattr(args, 'break_duration', None)

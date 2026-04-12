@@ -54,6 +54,16 @@ def handle_args():
         help="Choose the parse mode for chapter title, 'tag_text' search 'title','h1','h2','h3' tag for title, 'first_few' set first 60 characters as title, 'auto' auto apply the best mode for current chapter.",
     )
     parser.add_argument(
+        "--chapter_mode",
+        choices=["documents", "toc_sections"],
+        default="documents",
+        help=(
+            "Choose how EPUB content is grouped into chapters. "
+            "'documents' keeps one chapter per XHTML document. "
+            "'toc_sections' groups documents by top-level table-of-contents sections when possible."
+        ),
+    )
+    parser.add_argument(
         "--chapter_start",
         default=1,
         type=int,
@@ -256,7 +266,10 @@ def handle_args():
     )
     normalizer_group.add_argument(
         "--normalize_steps",
-        help="Comma-separated normalizer steps to apply in order. Example: simple_symbols,numbers_ru,tts_safe_split,llm",
+        help=(
+            "Comma-separated normalizer steps to apply in order. Example: "
+            "simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,proper_nouns_ru,tts_safe_split,llm"
+        ),
     )
     normalizer_group.add_argument(
         "--normalize_provider",
@@ -299,6 +312,38 @@ def handle_args():
         default=160,
         type=int,
         help="Maximum characters per sentence for the deterministic tts_safe_split normalizer (default: 160).",
+    )
+    normalizer_group.add_argument(
+        "--normalize_pronunciation_exceptions_file",
+        help=(
+            "Optional UTF-8 file with per-line pronunciation overrides in the form "
+            "'source==replacement'. Use this with pronunciation_exceptions_ru."
+        ),
+    )
+    normalizer_group.add_argument(
+        "--normalize_stress_exceptions_file",
+        help=(
+            "Optional UTF-8 file with per-line stress overrides in the form "
+            "'source==replacement'. Use this with stress_words_ru or tsnorm_ru."
+        ),
+    )
+    normalizer_group.add_argument(
+        "--normalize_tsnorm_stress_yo",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="When tsnorm_ru is enabled, restore or keep 'ё' where the backend can determine it (default: on).",
+    )
+    normalizer_group.add_argument(
+        "--normalize_tsnorm_stress_monosyllabic",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="When tsnorm_ru is enabled, also add stress marks to monosyllabic words (default: off).",
+    )
+    normalizer_group.add_argument(
+        "--normalize_tsnorm_min_word_length",
+        default=2,
+        type=int,
+        help="Minimum token length for tsnorm_ru stress processing (default: 2).",
     )
 
     edge_tts_group = parser.add_argument_group(title="edge specific")
@@ -379,8 +424,9 @@ def main(config=None, log_file=None):
         effective_log_file = Path(log_file)
     else:
         # Otherwise (e.g., CLI usage without a specific log file from UI),
-        # generate a unique log file name.
-        effective_log_file = generate_unique_log_path("EtA")
+        # keep logs inside the selected output folder so each run stays self-contained.
+        base_dir = Path(config.output_folder) if getattr(config, "output_folder", None) else None
+        effective_log_file = generate_unique_log_path("EtA", base_dir=base_dir)
     
     # Ensure config.log_file is updated, as it's used by AudiobookGenerator for worker processes.
     config.log_file = effective_log_file

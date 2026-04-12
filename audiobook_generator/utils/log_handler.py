@@ -43,9 +43,9 @@ def setup_logging(log_level, log_file=None, is_worker=False):
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
 
-def generate_unique_log_path(prefix: str) -> Path:
+def generate_unique_log_path(prefix: str, base_dir: str | Path | None = None) -> Path:
     """Generates a unique log file path with a timestamp."""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_dir = Path("logs")
+    log_dir = Path(base_dir) / "logs" if base_dir else Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir / f"{prefix}_{timestamp}.log"

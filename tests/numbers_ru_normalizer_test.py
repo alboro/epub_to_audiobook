@@ -2,11 +2,19 @@ import unittest
 from unittest.mock import MagicMock
 
 from audiobook_generator.config.general_config import GeneralConfig
+from audiobook_generator.normalizers.base_normalizer import BaseNormalizer
+from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNormalizer
 from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
+from audiobook_generator.normalizers.proper_nouns_ru_normalizer import ProperNounsRuNormalizer
+from audiobook_generator.normalizers.pronunciation_exceptions_ru_normalizer import (
+    PronunciationExceptionsRuNormalizer,
+)
+from audiobook_generator.normalizers.ru_text_utils import COMBINING_ACUTE
+from audiobook_generator.normalizers.stress_words_ru_normalizer import StressWordsRuNormalizer
 
 
-def make_config():
-    args = MagicMock(
+def make_config(**overrides):
+    values = dict(
         input_file="examples/The_Life_and_Adventures_of_Robinson_Crusoe.epub",
         output_folder="output",
         preview=False,
@@ -22,6 +30,7 @@ def make_config():
         m4b_bitrate="64k",
         ffmpeg_path="ffmpeg",
         title_mode="auto",
+        chapter_mode="documents",
         newline_mode="double",
         chapter_start=1,
         chapter_end=-1,
@@ -62,6 +71,11 @@ def make_config():
         normalize_base_url=None,
         normalize_max_chars=4000,
         normalize_tts_safe_max_chars=160,
+        normalize_pronunciation_exceptions_file=None,
+        normalize_stress_exceptions_file=None,
+        normalize_tsnorm_stress_yo=True,
+        normalize_tsnorm_stress_monosyllabic=False,
+        normalize_tsnorm_min_word_length=2,
         break_duration="1250",
         voice_rate=None,
         voice_volume=None,
@@ -75,7 +89,16 @@ def make_config():
         piper_length_scale=1.0,
         piper_sentence_silence=0.2,
     )
-    return GeneralConfig(args)
+    values.update(overrides)
+    return GeneralConfig(MagicMock(**values))
+
+
+class DummyNormalizer(BaseNormalizer):
+    def validate_config(self):
+        return None
+
+    def normalize(self, text: str, chapter_title: str = "") -> str:
+        return text
 
 
 class TestNumbersRuNormalizer(unittest.TestCase):
@@ -98,6 +121,94 @@ class TestNumbersRuNormalizer(unittest.TestCase):
     def test_ordinal_suffix(self):
         normalizer = NumbersRuNormalizer(make_config())
         self.assertEqual(normalizer.normalize("17-й век"), "семнадцатый век")
+
+    def test_cardinal_with_feminine_book_noun(self):
+        normalizer = NumbersRuNormalizer(make_config())
+        self.assertEqual(normalizer.normalize("1 глава"), "одна глава")
+
+    def test_cardinal_with_dative_book_noun(self):
+        normalizer = NumbersRuNormalizer(make_config())
+        self.assertEqual(normalizer.normalize("к 1 главе"), "к одной главе")
+
+
+class TestDeterministicRuNormalizers(unittest.TestCase):
+    def test_initials_ru(self):
+        normalizer = InitialsRuNormalizer(make_config(normalize_steps="initials_ru"))
+        self.assertEqual(
+            normalizer.normalize("вкратце о Е. Д. Калашниковой"),
+            "вкратце о Е-Дэ-Калашниковой",
+        )
+
+    def test_initials_ru_with_extra_spaces(self):
+        normalizer = InitialsRuNormalizer(make_config(normalize_steps="initials_ru"))
+        self.assertEqual(
+            normalizer.normalize("вкратце о Е.   Д.   Калашниковой"),
+            "вкратце о Е-Дэ-Калашниковой",
+        )
+
+    def test_pronunciation_exceptions_ru(self):
+        normalizer = PronunciationExceptionsRuNormalizer(
+            make_config(normalize_steps="pronunciation_exceptions_ru")
+        )
+        self.assertEqual(
+            normalizer.normalize("Отель расположен рядом."),
+            "Отэль расположен рядом.",
+        )
+
+    def test_stress_words_ru(self):
+        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="stress_words_ru"))
+        self.assertEqual(
+            normalizer.normalize("Это одно из чудес и больших беды."),
+            "Это одно из чуде́с и больших беды́.",
+        )
+
+
+class TestSharedNormalizerLLMSupport(unittest.TestCase):
+    def test_default_user_prompt_is_plain_text_only(self):
+        normalizer = DummyNormalizer(
+            make_config(
+                normalize_steps="simple_symbols",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+        llm = normalizer.get_normalizer_llm()
+        self.assertEqual(llm.settings.user_prompt_template, "{text}")
+        self.assertEqual(
+            llm.render_user_prompt(chapter_title="Глава 1", text="Привет, мир."),
+            "Привет, мир.",
+        )
+
+    def test_llm_runtime_is_shared_for_same_config(self):
+        config = make_config(
+            normalize_steps="simple_symbols",
+            normalize_base_url="http://127.0.0.1:1234/v1",
+        )
+        first = DummyNormalizer(config)
+        second = DummyNormalizer(config)
+        self.assertIs(first.get_normalizer_llm(), second.get_normalizer_llm())
+        self.assertTrue(first.has_normalizer_llm())
+
+
+class TestProperNounsRuNormalizer(unittest.TestCase):
+    def test_accents_internal_proper_nouns(self):
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="proper_nouns_ru"))
+        normalizer.backend = lambda text: {
+            "Фицджеральда": "Фицджера́льда",
+            "Калашниковой": "Кала́шниковой",
+            "Нью-Йорка": "Нью-Йо́рка",
+        }.get(text, text)
+        self.assertEqual(
+            normalizer.normalize("Раньше уже говорилось вкратце о Е. Д. Калашниковой и Фицджеральда из Нью-Йорка."),
+            "Раньше уже говорилось вкратце о Е. Д. Кала́шниковой и Фицджера́льда из Нью-Йо́рка.",
+        )
+
+    def test_skips_sentence_start_words(self):
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="proper_nouns_ru"))
+        normalizer.backend = lambda text: text + COMBINING_ACUTE
+        self.assertEqual(
+            normalizer.normalize("Для ясности автор этой книжки не лингвист. Но Фицджеральда он помнит."),
+            "Для ясности автор этой книжки не лингвист. Но Фицджеральда́ он помнит.",
+        )
 
 
 if __name__ == "__main__":

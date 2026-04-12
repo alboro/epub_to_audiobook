@@ -4,7 +4,6 @@ This recipe is a simplified launcher for a Russian XTTS workflow.
 
 It assumes:
 
-- `epub_to_audiobook` runs on the current machine
 - a compatible XTTS polling server is reachable at `--tts-base-url`
 - the normalizer endpoint is provided through arguments or environment variables
 

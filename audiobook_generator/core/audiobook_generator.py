@@ -1,6 +1,8 @@
 import logging
 import multiprocessing
 import os
+import shutil
+from pathlib import Path
 
 from audiobook_generator.book_parsers.base_book_parser import get_book_parser
 from audiobook_generator.config.general_config import GeneralConfig
@@ -52,6 +54,38 @@ class AudiobookGenerator:
         with open(text_file, "w", encoding="utf-8", newline="\n") as file_handle:
             file_handle.write(text)
         return text_file
+
+    def _copy_input_book(self):
+        if not self.config.input_file or not self.config.output_folder:
+            return None
+
+        source_path = Path(self.config.input_file).expanduser().resolve()
+        if not source_path.is_file():
+            return None
+
+        source_dir = Path(self.config.output_folder) / "_source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        target_path = source_dir / source_path.name
+
+        try:
+            if source_path.samefile(target_path):
+                return str(target_path)
+        except FileNotFoundError:
+            pass
+
+        if target_path.exists():
+            source_stat = source_path.stat()
+            target_stat = target_path.stat()
+            if (
+                source_stat.st_size == target_stat.st_size
+                and int(source_stat.st_mtime) == int(target_stat.st_mtime)
+            ):
+                logger.info("Source book already copied to %s", target_path)
+                return str(target_path)
+
+        shutil.copy2(source_path, target_path)
+        logger.info("Copied source book to %s", target_path)
+        return str(target_path)
 
     def _chapter_artifact_dir(self, idx, title):
         artifacts_root = os.path.join(self.config.output_folder, "_chapter_artifacts")
@@ -221,6 +255,7 @@ class AudiobookGenerator:
             tts_provider = get_tts_provider(self.config)
 
             os.makedirs(self.config.output_folder, exist_ok=True)
+            self._copy_input_book()
             if self.config.prepared_text_folder and not os.path.isdir(self.config.prepared_text_folder):
                 raise FileNotFoundError(
                     f"Prepared text folder not found: {self.config.prepared_text_folder}"

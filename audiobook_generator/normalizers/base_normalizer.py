@@ -7,6 +7,11 @@ NORMALIZER_LLM = "llm"
 NORMALIZER_SIMPLE_SYMBOLS = "simple_symbols"
 NORMALIZER_TTS_SAFE_SPLIT = "tts_safe_split"
 NORMALIZER_NUMBERS_RU = "numbers_ru"
+NORMALIZER_INITIALS_RU = "initials_ru"
+NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU = "pronunciation_exceptions_ru"
+NORMALIZER_STRESS_WORDS_RU = "stress_words_ru"
+NORMALIZER_TSNORM_RU = "tsnorm_ru"
+NORMALIZER_PROPER_NOUNS_RU = "proper_nouns_ru"
 
 
 class BaseNormalizer:
@@ -23,6 +28,18 @@ class BaseNormalizer:
     def get_step_name(self) -> str:
         return getattr(self, "STEP_NAME", self.__class__.__name__.lower())
 
+    def get_normalizer_llm(self):
+        cached_runtime = getattr(self.config, "_normalizer_llm_runtime", None)
+        if cached_runtime is None:
+            from audiobook_generator.normalizers.llm_support import NormalizerLLM
+
+            cached_runtime = NormalizerLLM(self.config)
+            setattr(self.config, "_normalizer_llm_runtime", cached_runtime)
+        return cached_runtime
+
+    def has_normalizer_llm(self) -> bool:
+        return self.get_normalizer_llm().is_available
+
     def normalize_with_trace(self, text: str, chapter_title: str = "") -> tuple[str, list[tuple[str, str]]]:
         normalized = self.normalize(text, chapter_title=chapter_title)
         return normalized, [(self.get_step_name(), normalized)]
@@ -32,6 +49,11 @@ def get_supported_normalizers() -> List[str]:
     return [
         NORMALIZER_OPENAI,
         NORMALIZER_SIMPLE_SYMBOLS,
+        NORMALIZER_INITIALS_RU,
+        NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
+        NORMALIZER_STRESS_WORDS_RU,
+        NORMALIZER_PROPER_NOUNS_RU,
+        NORMALIZER_TSNORM_RU,
         NORMALIZER_TTS_SAFE_SPLIT,
         NORMALIZER_NUMBERS_RU,
     ]
@@ -105,6 +127,23 @@ def normalize_step_name(step: str) -> str:
         NORMALIZER_SIMPLE_SYMBOLS: NORMALIZER_SIMPLE_SYMBOLS,
         "symbols": NORMALIZER_SIMPLE_SYMBOLS,
         "safe_symbols": NORMALIZER_SIMPLE_SYMBOLS,
+        NORMALIZER_INITIALS_RU: NORMALIZER_INITIALS_RU,
+        "initials": NORMALIZER_INITIALS_RU,
+        "ru_initials": NORMALIZER_INITIALS_RU,
+        NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU: NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
+        "pronunciation": NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
+        "pronunciation_exceptions": NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
+        "ru_pronunciation": NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
+        NORMALIZER_STRESS_WORDS_RU: NORMALIZER_STRESS_WORDS_RU,
+        "stress_words": NORMALIZER_STRESS_WORDS_RU,
+        "stress_overrides": NORMALIZER_STRESS_WORDS_RU,
+        NORMALIZER_PROPER_NOUNS_RU: NORMALIZER_PROPER_NOUNS_RU,
+        "proper_nouns": NORMALIZER_PROPER_NOUNS_RU,
+        "proper_names": NORMALIZER_PROPER_NOUNS_RU,
+        "stress_names": NORMALIZER_PROPER_NOUNS_RU,
+        NORMALIZER_TSNORM_RU: NORMALIZER_TSNORM_RU,
+        "tsnorm": NORMALIZER_TSNORM_RU,
+        "stress_ru": NORMALIZER_TSNORM_RU,
         NORMALIZER_TTS_SAFE_SPLIT: NORMALIZER_TTS_SAFE_SPLIT,
         "safe_split": NORMALIZER_TTS_SAFE_SPLIT,
         "split": NORMALIZER_TTS_SAFE_SPLIT,
@@ -128,6 +167,28 @@ def _create_normalizer(step: str, config: GeneralConfig) -> BaseNormalizer:
         from audiobook_generator.normalizers.simple_symbols_normalizer import SimpleSymbolsNormalizer
 
         return SimpleSymbolsNormalizer(config)
+    if step == NORMALIZER_INITIALS_RU:
+        from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNormalizer
+
+        return InitialsRuNormalizer(config)
+    if step == NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU:
+        from audiobook_generator.normalizers.pronunciation_exceptions_ru_normalizer import (
+            PronunciationExceptionsRuNormalizer,
+        )
+
+        return PronunciationExceptionsRuNormalizer(config)
+    if step == NORMALIZER_STRESS_WORDS_RU:
+        from audiobook_generator.normalizers.stress_words_ru_normalizer import StressWordsRuNormalizer
+
+        return StressWordsRuNormalizer(config)
+    if step == NORMALIZER_PROPER_NOUNS_RU:
+        from audiobook_generator.normalizers.proper_nouns_ru_normalizer import ProperNounsRuNormalizer
+
+        return ProperNounsRuNormalizer(config)
+    if step == NORMALIZER_TSNORM_RU:
+        from audiobook_generator.normalizers.tsnorm_ru_normalizer import TSNormRuNormalizer
+
+        return TSNormRuNormalizer(config)
     if step == NORMALIZER_TTS_SAFE_SPLIT:
         from audiobook_generator.normalizers.tts_safe_split_normalizer import TTSSafeSplitNormalizer
 
