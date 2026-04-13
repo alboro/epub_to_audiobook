@@ -8,6 +8,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from audiobook_generator.normalizers.pronunciation_lexicon_db import (
     get_default_pronunciation_lexicon_db_path,
 )
@@ -115,7 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def resolve_project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return PROJECT_ROOT
 
 
 def resolve_python(project_root: Path) -> Path:
