@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 from pathlib import Path
 import tempfile
+import json
 
 from audiobook_generator.config.general_config import GeneralConfig
 from audiobook_generator.normalizers.base_normalizer import BaseNormalizer
@@ -9,12 +10,29 @@ from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNor
 from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
 from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
 from audiobook_generator.normalizers.pipeline_runner import NormalizationPipelineRunner
+from audiobook_generator.normalizers.proper_nouns_pronunciation_ru_normalizer import (
+    ProperNounsPronunciationRuNormalizer,
+)
 from audiobook_generator.normalizers.proper_nouns_ru_normalizer import ProperNounsRuNormalizer
 from audiobook_generator.normalizers.pronunciation_exceptions_ru_normalizer import (
     PronunciationExceptionsRuNormalizer,
 )
-from audiobook_generator.normalizers.ru_text_utils import COMBINING_ACUTE
+from audiobook_generator.normalizers.ru_text_utils import (
+    COMBINING_ACUTE,
+    load_choice_mapping_file,
+    plus_stress_to_combining_acute,
+)
+from audiobook_generator.normalizers.simple_symbols_normalizer import SimpleSymbolsNormalizer
+from audiobook_generator.normalizers.stress_ambiguity_llm_normalizer import (
+    StressAmbiguityLLMNormalizer,
+)
+from audiobook_generator.normalizers.tts_safe_split_normalizer import TTSSafeSplitNormalizer
 from audiobook_generator.normalizers.stress_words_ru_normalizer import StressWordsRuNormalizer
+from audiobook_generator.normalizers.llm_support import (
+    NormalizerLLMChoiceService,
+    NormalizerLLMChoiceItem,
+    NormalizerLLMChoiceOption,
+)
 
 
 def make_config(**overrides):
@@ -74,9 +92,10 @@ def make_config(**overrides):
         normalize_api_key=None,
         normalize_base_url=None,
         normalize_max_chars=4000,
-        normalize_tts_safe_max_chars=160,
+        normalize_tts_safe_max_chars=180,
         normalize_pronunciation_exceptions_file=None,
         normalize_stress_exceptions_file=None,
+        normalize_stress_ambiguity_file=None,
         normalize_tsnorm_stress_yo=True,
         normalize_tsnorm_stress_monosyllabic=False,
         normalize_tsnorm_min_word_length=2,
@@ -149,6 +168,17 @@ class DummyChunkedNormalizer(BaseNormalizer):
         return {"01_user_prompt.txt": f"prompt for {unit}"}
 
 
+class FakeLLM:
+    def __init__(self, *, settings, response_text):
+        self.settings = settings
+        self.response_text = response_text
+        self.calls = 0
+
+    def complete(self, **kwargs):
+        self.calls += 1
+        return self.response_text
+
+
 class TestNumbersRuNormalizer(unittest.TestCase):
     def test_plain_cardinal(self):
         normalizer = NumbersRuNormalizer(make_config())
@@ -206,9 +236,57 @@ class TestDeterministicRuNormalizers(unittest.TestCase):
     def test_stress_words_ru(self):
         normalizer = StressWordsRuNormalizer(make_config(normalize_steps="stress_words_ru"))
         self.assertEqual(
-            normalizer.normalize("Это одно из чудес и больших беды."),
-            "Это одно из чуде́с и больших беды́.",
+            normalizer.normalize("Это одно из чудес, а не все чудеса."),
+            "Это одно из чуде́с, а не все чудеса́.",
         )
+
+    def test_stress_words_ru_leaves_ambiguous_word_unchanged(self):
+        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="stress_words_ru"))
+        self.assertEqual(
+            normalizer.normalize("И после беды пришли новые беды."),
+            "И после беды пришли новые беды.",
+        )
+
+    def test_simple_symbols_aggressive_cleanup_preserves_letters_digits_and_stress(self):
+        normalizer = SimpleSymbolsNormalizer(make_config(normalize_steps="simple_symbols"))
+        self.assertEqual(
+            normalizer.normalize('Текст\u200b с\u00a0мусором • и™ акце́нтом… «цитата» — 42'),
+            'Текст с мусором и акце́нтом... "цитата" - 42',
+        )
+
+    def test_plus_stress_to_combining_acute(self):
+        self.assertEqual(
+            plus_stress_to_combining_acute("б+еды"),
+            f"бе{COMBINING_ACUTE}ды",
+        )
+
+    def test_load_choice_mapping_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mapping_path = Path(temp_dir) / "ambiguities.txt"
+            mapping_path.write_text(
+                "беды==б+еды|бед+ы\nпоступи==п+оступи|поступ+и\n",
+                encoding="utf-8",
+            )
+            mapping = load_choice_mapping_file(str(mapping_path))
+            self.assertEqual(
+                mapping["беды"],
+                (f"бе{COMBINING_ACUTE}ды", f"беды{COMBINING_ACUTE}"),
+            )
+
+
+class TestTTSSafeSplitNormalizer(unittest.TestCase):
+    def test_avoids_single_word_tail_split(self):
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(
+                normalize_steps="tts_safe_split",
+                normalize_tts_safe_max_chars=160,
+            )
+        )
+        result = normalizer.normalize(
+            'О, если б голова моя была водой, и очи мои - Исто́чниками, льющимися, как жидкие небеса. Тогда́ бы я дал волю могучему потоку И оплакал бы потопом род человеческий'
+        )
+        self.assertNotIn("род. Человеческий", result)
+        self.assertIn("род человеческий", result)
 
 
 class TestSharedNormalizerLLMSupport(unittest.TestCase):
@@ -244,6 +322,73 @@ class TestSharedNormalizerLLMSupport(unittest.TestCase):
         self.assertEqual(len(merged), 2)
         self.assertIn("B" * 900, merged[0])
 
+    def test_choice_response_parser_accepts_json_fences(self):
+        parsed = NormalizerLLMChoiceService.parse_choice_response(
+            """```json
+            {"selections":[{"id":"item-1","option_id":"phonetic"}]}
+            ```"""
+        )
+        self.assertEqual(parsed, {"item-1": "phonetic"})
+
+    def test_choice_response_parser_accepts_cacheable_and_custom_text(self):
+        parsed = NormalizerLLMChoiceService.parse_choice_response_objects(
+            """{
+              "selections": [
+                {
+                  "id": "item-1",
+                  "custom_text": "То́мас Пэйн",
+                  "cacheable": true,
+                  "reason": "Stable surname pronunciation"
+                }
+              ]
+            }"""
+        )
+        self.assertEqual(parsed["item-1"].custom_text, "То́мас Пэйн")
+        self.assertTrue(parsed["item-1"].cacheable)
+        self.assertEqual(parsed["item-1"].reason, "Stable surname pronunciation")
+
+    def test_choice_service_reuses_cache(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = MagicMock(
+                max_chars=4000,
+                choice_cache_path=str(Path(temp_dir) / "choice_cache.json"),
+                model="gpt-5.4",
+                provider="openai",
+                base_url="http://127.0.0.1:1234/v1",
+            )
+            response = json.dumps(
+                {
+                    "selections": [
+                        {
+                            "id": "item-1",
+                            "custom_text": "То́мас Пэйн",
+                            "cacheable": True,
+                            "reason": "Stable pronunciation",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+            llm = FakeLLM(settings=settings, response_text=response)
+            service = NormalizerLLMChoiceService(llm)
+            item = NormalizerLLMChoiceItem(
+                item_id="item-1",
+                source_text="Томас Пейн",
+                context="Томас Пейн писал эссе.",
+                note=None,
+                options=(
+                    NormalizerLLMChoiceOption("original", "Томас Пейн"),
+                    NormalizerLLMChoiceOption("guided", "То́мас Пэйн"),
+                ),
+            )
+
+            first = service.choose_batch([item], target_language="ru-RU")
+            second = service.choose_batch([item], target_language="ru-RU")
+
+            self.assertEqual(first["item-1"].custom_text, "То́мас Пэйн")
+            self.assertEqual(second["item-1"].source, "cache")
+            self.assertEqual(llm.calls, 1)
+
 
 class TestProperNounsRuNormalizer(unittest.TestCase):
     def test_accents_internal_proper_nouns(self):
@@ -267,6 +412,185 @@ class TestProperNounsRuNormalizer(unittest.TestCase):
         )
 
 
+class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
+    def test_builds_pronunciation_variants_and_applies_selected_options(self):
+        normalizer = ProperNounsPronunciationRuNormalizer(
+            make_config(
+                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+
+        def fake_choose_batch(items, **kwargs):
+            selections = {}
+            for item in items:
+                if item.source_text == "Томас Пейн":
+                    selections[item.item_id] = "guided"
+                elif item.source_text == "Лев Толстой":
+                    selections[item.item_id] = "guided"
+                else:
+                    selections[item.item_id] = "original"
+            return selections
+
+        normalizer.choice_service.choose_batch = fake_choose_batch
+        result = normalizer.normalize(
+            'Томас Пейн писал о вере, а позже Лев Толстой спорил с газетой "Таймс".'
+        )
+
+        self.assertIn("Пэйн", result)
+        self.assertIn(f"Лев Толсто{COMBINING_ACUTE}й", result)
+        self.assertIn(f"То{COMBINING_ACUTE}мас Пэйн", result)
+        self.assertIn('"Таймс"', result)
+
+    def test_prompt_artifacts_include_context_and_options(self):
+        normalizer = ProperNounsPronunciationRuNormalizer(
+            make_config(
+                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+        text = 'В лондонскую газету "Таймс" писал Томас Пейн.'
+        units = normalizer.plan_processing_units(text, chapter_title="Test")
+        self.assertTrue(units)
+        artifacts = normalizer.get_unit_artifacts(
+            units[0],
+            chapter_title="Test",
+            unit_index=1,
+            unit_count=len(units),
+        )
+        self.assertIn("Томас Пейн", artifacts["01_choice_user_prompt.txt"])
+        self.assertIn("Пэйн", artifacts["01_choice_user_prompt.txt"])
+
+    def test_skips_generic_leading_sentence_word_in_candidate(self):
+        normalizer = ProperNounsPronunciationRuNormalizer(
+            make_config(
+                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+        units = normalizer.plan_processing_units("Когда Моисей сказал народу.", chapter_title="Test")
+        self.assertEqual(len(units), 1)
+        artifacts = normalizer.get_unit_artifacts(
+            units[0],
+            chapter_title="Test",
+            unit_index=1,
+            unit_count=1,
+        )
+        self.assertIn('"source_text": "Моисей"', artifacts["01_choice_user_prompt.txt"])
+        self.assertIn('"context": "Когда Моисей сказал народу"', artifacts["01_choice_user_prompt.txt"])
+
+    def test_collapses_double_stress_marks_from_backend(self):
+        normalizer = ProperNounsPronunciationRuNormalizer(
+            make_config(
+                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+        normalizer.backend = lambda text: {
+            "Новый": f"Но{COMBINING_ACUTE}вый",
+            "Завет": f"За{COMBINING_ACUTE}ве{COMBINING_ACUTE}т",
+        }.get(text, text)
+        self.assertEqual(
+            normalizer._accent_phrase("Новый Завет"),
+            f"Но{COMBINING_ACUTE}вый Заве{COMBINING_ACUTE}т",
+        )
+
+    def test_post_step_artifacts_include_selection_stats(self):
+        normalizer = ProperNounsPronunciationRuNormalizer(
+            make_config(
+                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+        normalizer.choice_service.choose_batch = lambda items, **kwargs: {
+            items[0].item_id: MagicMock(
+                option_id="guided",
+                custom_text=None,
+                cacheable=True,
+                reason="Stable pronunciation",
+                source="llm",
+                has_custom_text=False,
+                resolved_option_id=lambda: "guided",
+            )
+        }
+        result = normalizer.normalize("Томас Пейн писал эссе.")
+        artifacts = normalizer.get_post_step_artifacts(
+            input_text="Томас Пейн писал эссе.",
+            output_text=result,
+            chapter_title="Test",
+        )
+        self.assertIn("changed_candidates", artifacts["93_selection_stats.json"])
+        self.assertIn("Томас Пейн", artifacts["92_selection_report.txt"])
+
+
+class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
+    def test_selects_contextual_variants_for_same_surface_form(self):
+        normalizer = StressAmbiguityLLMNormalizer(
+            make_config(
+                normalize_steps="stress_ambiguity_llm",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+
+        def fake_choose_batch(items, **kwargs):
+            selections = {}
+            for item in items:
+                if item.item_id.endswith("0001"):
+                    selections[item.item_id] = "variant_2"
+                elif item.item_id.endswith("0002"):
+                    selections[item.item_id] = "variant_1"
+                else:
+                    selections[item.item_id] = "original"
+            return selections
+
+        normalizer.choice_service.choose_batch = fake_choose_batch
+        result = normalizer.normalize("После беды пришли новые беды.")
+        self.assertEqual(
+            result,
+            f"После беды{COMBINING_ACUTE} пришли новые бе{COMBINING_ACUTE}ды.",
+        )
+
+    def test_skips_already_accented_word(self):
+        normalizer = StressAmbiguityLLMNormalizer(
+            make_config(
+                normalize_steps="stress_ambiguity_llm",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+        units = normalizer.plan_processing_units(
+            f"После беды{COMBINING_ACUTE} пришли новые бе{COMBINING_ACUTE}ды.",
+            chapter_title="Test",
+        )
+        self.assertEqual(units, [])
+
+    def test_post_step_artifacts_include_reports(self):
+        normalizer = StressAmbiguityLLMNormalizer(
+            make_config(
+                normalize_steps="stress_ambiguity_llm",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+            )
+        )
+        normalizer.choice_service.choose_batch = lambda items, **kwargs: {
+            items[0].item_id: MagicMock(
+                option_id="variant_2",
+                custom_text=None,
+                cacheable=False,
+                reason="Context says genitive singular",
+                source="llm",
+                has_custom_text=False,
+                resolved_option_id=lambda: "variant_2",
+            )
+        }
+        result = normalizer.normalize("После беды.")
+        artifacts = normalizer.get_post_step_artifacts(
+            input_text="После беды.",
+            output_text=result,
+            chapter_title="Test",
+        )
+        self.assertIn("changed_candidates", artifacts["93_selection_stats.json"])
+        self.assertIn("После беды", artifacts["92_selection_report.txt"])
+
+
 class TestNormalizationPipelineRunner(unittest.TestCase):
     def test_resumes_chunked_units_and_saves_prompt_artifacts(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -281,6 +605,9 @@ class TestNormalizationPipelineRunner(unittest.TestCase):
             self.assertEqual(trace, [("dummy_chunked", "ALPHA\n\nBETA")])
             self.assertTrue((artifact_dir / "_normalizer_steps" / "01_dummy_chunked" / "00_system_prompt.txt").is_file())
             self.assertTrue((artifact_dir / "_normalizer_steps" / "01_dummy_chunked" / "chunks" / "0001" / "01_user_prompt.txt").is_file())
+            self.assertTrue((artifact_dir / "_normalizer_steps" / "01_dummy_chunked" / "90_changes.md").is_file())
+            self.assertTrue((artifact_dir / "_normalizer_steps" / "01_dummy_chunked" / "91_changes.diff").is_file())
+            self.assertTrue((artifact_dir / "00_normalizer_change_summary.md").is_file())
 
             second = DummyChunkedNormalizer(config)
             second_runner = NormalizationPipelineRunner(config=config, artifact_dir=artifact_dir)

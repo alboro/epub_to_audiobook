@@ -8,6 +8,7 @@ from audiobook_generator.normalizers.base_normalizer import BaseNormalizer
 from audiobook_generator.normalizers.ru_text_utils import (
     COMBINING_ACUTE,
     load_mapping_file,
+    normalize_stress_marks,
     preserve_case,
     strip_combining_acute,
     is_russian_language,
@@ -18,7 +19,6 @@ logger = logging.getLogger(__name__)
 STRESSABLE_WORD_PATTERN = re.compile(rf"[А-Яа-яЁё{COMBINING_ACUTE}-]+")
 
 BUILTIN_STRESS_OVERRIDES = {
-    "беды": "беды́",
     "чудес": "чуде́с",
     "чудеса": "чудеса́",
     "каштановые": "каштАновые",
@@ -65,7 +65,9 @@ class StressWordsRuNormalizer(BaseNormalizer):
             if not replacement:
                 return source
             replacements += 1
-            return preserve_case(strip_combining_acute(source), replacement)
+            return normalize_stress_marks(
+                preserve_case(strip_combining_acute(source), replacement)
+            )
 
         normalized = STRESSABLE_WORD_PATTERN.sub(replace_word, text)
         logger.info(

@@ -6,6 +6,11 @@ import logging
 from pathlib import Path
 
 from audiobook_generator.normalizers.base_normalizer import ChainNormalizer
+from audiobook_generator.normalizers.change_report import (
+    build_change_blocks,
+    build_unified_diff,
+    render_change_report,
+)
 from audiobook_generator.normalizers.progress_store import NormalizationProgressStore
 
 logger = logging.getLogger(__name__)
@@ -21,6 +26,7 @@ class NormalizationPipelineRunner:
             Path(self.config.output_folder) / "_state" / "normalization_progress.sqlite3"
         )
         self.chapter_key = self.artifact_dir.name
+        self.step_summaries: list[dict[str, object]] = []
 
     def run(self, normalizer, text: str, chapter_title: str) -> tuple[str, list[tuple[str, str]]]:
         if not normalizer:
@@ -40,6 +46,7 @@ class NormalizationPipelineRunner:
             )
             trace.append((step_name, current_text))
 
+        self._write_pipeline_summary()
         return current_text, trace
 
     def _resolve_steps(self, normalizer):
@@ -77,7 +84,17 @@ class NormalizationPipelineRunner:
                 chapter_title,
                 step_name,
             )
-            return output_path.read_text(encoding="utf-8")
+            cached_output = output_path.read_text(encoding="utf-8")
+            self.step_summaries.append(
+                {
+                    "step_index": step_index,
+                    "step_name": step_name,
+                    "changed": input_text != cached_output,
+                    "change_blocks": len(build_change_blocks(input_text, cached_output)),
+                    "step_dir": str(step_dir),
+                }
+            )
+            return cached_output
 
         self.store.upsert_step(
             chapter_key=self.chapter_key,
@@ -105,6 +122,31 @@ class NormalizationPipelineRunner:
                 normalized = step_normalizer.normalize(input_text, chapter_title=chapter_title)
 
             output_path.write_text(normalized, encoding="utf-8", newline="\n")
+            self._write_named_artifacts(
+                step_dir,
+                self._build_change_artifacts(
+                    input_text=input_text,
+                    output_text=normalized,
+                    title=f"{step_name} changes",
+                ),
+            )
+            self._write_named_artifacts(
+                step_dir,
+                step_normalizer.get_post_step_artifacts(
+                    input_text=input_text,
+                    output_text=normalized,
+                    chapter_title=chapter_title,
+                ),
+            )
+            self.step_summaries.append(
+                {
+                    "step_index": step_index,
+                    "step_name": step_name,
+                    "changed": input_text != normalized,
+                    "change_blocks": len(build_change_blocks(input_text, normalized)),
+                    "step_dir": str(step_dir),
+                }
+            )
             self.store.upsert_step(
                 chapter_key=self.chapter_key,
                 step_index=step_index,
@@ -201,6 +243,14 @@ class NormalizationPipelineRunner:
                     unit_count=len(units),
                 )
                 unit_output_path.write_text(unit_result, encoding="utf-8", newline="\n")
+                self._write_named_artifacts(
+                    unit_dir,
+                    self._build_change_artifacts(
+                        input_text=unit,
+                        output_text=unit_result,
+                        title=f"{step_name} chunk {unit_index} changes",
+                    ),
+                )
                 self.store.upsert_unit(
                     chapter_key=self.chapter_key,
                     step_index=step_index,
@@ -257,3 +307,31 @@ class NormalizationPipelineRunner:
             path = base_dir / relative_name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8", newline="\n")
+
+    @staticmethod
+    def _build_change_artifacts(*, input_text: str, output_text: str, title: str) -> dict[str, str]:
+        return {
+            "90_changes.md": render_change_report(input_text, output_text, title=title),
+            "91_changes.diff": build_unified_diff(
+                input_text,
+                output_text,
+                fromfile="input.txt",
+                tofile="output.txt",
+            ),
+        }
+
+    def _write_pipeline_summary(self):
+        if not self.step_summaries:
+            return
+
+        lines = ["# Normalizer Change Summary", ""]
+        for item in self.step_summaries:
+            lines.append(f"## {item['step_index']:02d}. {item['step_name']}")
+            lines.append("")
+            lines.append(f"- changed: {'yes' if item['changed'] else 'no'}")
+            lines.append(f"- change_blocks: {item['change_blocks']}")
+            lines.append(f"- step_dir: {item['step_dir']}")
+            lines.append("")
+
+        summary_path = self.artifact_dir / "00_normalizer_change_summary.md"
+        summary_path.write_text("\n".join(lines), encoding="utf-8", newline="\n")

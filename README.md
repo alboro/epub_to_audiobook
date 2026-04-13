@@ -87,7 +87,7 @@ Normalizer prompts can be customized per run from text files:
 
 - `--normalize_system_prompt_file path.txt`
 - `--normalize_user_prompt_file path.txt`
-- `--normalize_steps simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,tts_safe_split,llm`
+- `--normalize_steps simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,stress_ambiguity_llm,tts_safe_split,llm`
 
 The user prompt template supports these placeholders:
 
@@ -129,17 +129,31 @@ Built-in normalizer steps:
   and book-structure patterns such as `1 глава` -> `одна глава`.
 - `stress_words_ru`
   Adds stress marks only for a curated list of problem words instead of accenting the whole text.
-  Built-in examples include `беды` -> `беды́`, `чудес` -> `чуде́с`, `чудеса` -> `чудеса́`.
+  Built-in examples include `чудес` -> `чуде́с`, `чудеса` -> `чудеса́`.
   Use `--normalize_stress_exceptions_file path.txt` to extend the list.
+- `stress_ambiguity_llm`
+  Finds only known ambiguous Russian word forms, builds a small set of valid stress variants,
+  and asks an OpenAI-compatible LLM to choose the best option from context.
+  This is designed for real homographs such as `беды` or `поступи`, where a global replacement
+  would be unsafe but full-text rewriting would be excessive.
+  Use `--normalize_stress_ambiguity_file path.txt` to add more entries in the form
+  `source==variant1|variant2`, with either combining acute accents or Silero-style plus notation
+  like `б+еды|бед+ы`.
 - `proper_nouns_ru`
   Uses the existing `tsnorm` accent backend, but only on likely Russian proper nouns written with capital letters inside a sentence.
   This is meant as a compromise between no accents at all and accenting the whole book.
   It is especially useful for surnames, city names, and multi-part place names that XTTS tends to stress badly.
   The current heuristic intentionally skips most sentence-start words to avoid over-accenting ordinary prose.
+- `proper_nouns_pronunciation_ru`
+  Collects likely proper names and named entities, builds several pronunciation variants,
+  and asks an OpenAI-compatible LLM to choose the most TTS-safe option in context.
+  This is narrower and safer than a free-form rewrite because the model chooses from explicit options
+  instead of rewriting the whole sentence.
+  Prompt artifacts and batch decisions are saved in chapter artifacts just like other resumable LLM-backed steps.
 - `tts_safe_split`
   Deterministically rewrites overlong sentences into shorter ones before TTS.
   This is designed for XTTS-style models that become unstable on long Russian sentences.
-  Use `--normalize_tts_safe_max_chars 160` to tune the target sentence length.
+Use `--normalize_tts_safe_max_chars 180` to tune the target sentence length.
 - `tsnorm_ru`
   Runs the optional `tsnorm` backend for broader Russian stress and `ё` restoration.
   This is more aggressive than `stress_words_ru`, so it is best enabled deliberately rather than by default.
@@ -153,12 +167,12 @@ Built-in normalizer steps:
 
 Recommended chain for Russian XTTS:
 
-- `simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,stress_words_ru,llm,simple_symbols,initials_ru,pronunciation_exceptions_ru,stress_words_ru,proper_nouns_ru,tts_safe_split`
+- `simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,stress_words_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,pronunciation_exceptions_ru,stress_words_ru,proper_nouns_pronunciation_ru,tts_safe_split`
 
 This lets deterministic steps handle typography, obvious numerals, and sentence length,
 while the LLM focuses on the harder context-dependent rewrites. The repeated post-LLM cleanup
 steps are intentional: they restore initials, pronunciation overrides, sparse stress marks,
-and likely proper-name accents if the LLM drifts back toward riskier forms.
+and contextual proper-name pronunciation if the LLM drifts back toward riskier forms.
 
 Optional stronger accent chain:
 

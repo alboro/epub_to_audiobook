@@ -268,7 +268,9 @@ def handle_args():
         "--normalize_steps",
         help=(
             "Comma-separated normalizer steps to apply in order. Example: "
-            "simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,proper_nouns_ru,tts_safe_split,llm"
+            "simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,stress_words_ru,"
+            "stress_ambiguity_llm,llm,simple_symbols,initials_ru,pronunciation_exceptions_ru,"
+            "proper_nouns_pronunciation_ru,tts_safe_split"
         ),
     )
     normalizer_group.add_argument(
@@ -309,9 +311,9 @@ def handle_args():
     )
     normalizer_group.add_argument(
         "--normalize_tts_safe_max_chars",
-        default=160,
+        default=180,
         type=int,
-        help="Maximum characters per sentence for the deterministic tts_safe_split normalizer (default: 160).",
+        help="Maximum characters per sentence for the deterministic tts_safe_split normalizer (default: 180).",
     )
     normalizer_group.add_argument(
         "--normalize_pronunciation_exceptions_file",
@@ -325,6 +327,14 @@ def handle_args():
         help=(
             "Optional UTF-8 file with per-line stress overrides in the form "
             "'source==replacement'. Use this with stress_words_ru or tsnorm_ru."
+        ),
+    )
+    normalizer_group.add_argument(
+        "--normalize_stress_ambiguity_file",
+        help=(
+            "Optional UTF-8 file with per-line ambiguity variants in the form "
+            "'source==variant1|variant2'. Variants may use combining acute accents or "
+            "Silero-style plus notation such as 'б+еды|бед+ы'. Use this with stress_ambiguity_llm."
         ),
     )
     normalizer_group.add_argument(

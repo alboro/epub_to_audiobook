@@ -11,8 +11,8 @@ from pathlib import Path
 
 DEFAULT_NORMALIZE_STEPS = (
     "simple_symbols,initials_ru,pronunciation_exceptions_ru,"
-    "numbers_ru,stress_words_ru,llm,simple_symbols,"
-    "initials_ru,pronunciation_exceptions_ru,stress_words_ru,proper_nouns_ru,tts_safe_split"
+    "numbers_ru,stress_words_ru,stress_ambiguity_llm,llm,simple_symbols,"
+    "initials_ru,pronunciation_exceptions_ru,stress_words_ru,proper_nouns_pronunciation_ru,tts_safe_split"
 )
 DEFAULT_NORMALIZE_MODEL = "gpt-5.4"
 DEFAULT_VOICE_NAME = "reference_long"
@@ -78,8 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--normalize-tts-safe-max-chars",
         type=int,
-        default=160,
-        help="Deterministic safe split max chars. Default: 160.",
+        default=180,
+        help="Deterministic safe split max chars. Default: 180.",
     )
     parser.add_argument("--worker-count", type=int, default=1, help="Worker count. Default: 1.")
     parser.add_argument("--poll-interval", type=int, default=5, help="Polling interval in seconds. Default: 5.")

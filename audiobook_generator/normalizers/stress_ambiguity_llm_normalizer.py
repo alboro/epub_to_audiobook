@@ -1,0 +1,505 @@
+from __future__ import annotations
+
+import json
+import logging
+import re
+from dataclasses import dataclass
+
+from audiobook_generator.config.general_config import GeneralConfig
+from audiobook_generator.normalizers.base_normalizer import BaseNormalizer
+from audiobook_generator.normalizers.llm_support import (
+    DEFAULT_CHOICE_SYSTEM_PROMPT,
+    NormalizerLLMChoiceItem,
+    NormalizerLLMChoiceOption,
+    NormalizerLLMChoiceSelection,
+    NormalizerLLMChoiceService,
+)
+from audiobook_generator.normalizers.ru_text_utils import (
+    COMBINING_ACUTE,
+    CYRILLIC_STRESSED_WORD_PATTERN,
+    is_russian_language,
+    load_choice_mapping_file,
+    normalize_stress_marks,
+    plus_stress_to_combining_acute,
+    preserve_case,
+    strip_combining_acute,
+)
+
+logger = logging.getLogger(__name__)
+
+AMBIGUOUS_WORD_PATTERN = re.compile(rf"[А-Яа-яЁё{COMBINING_ACUTE}-]+")
+
+STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT = (
+    DEFAULT_CHOICE_SYSTEM_PROMPT
+    + """
+
+Additional rules for this task:
+- The target language is Russian text-to-speech.
+- Focus only on ambiguous Russian word stress or pronunciation inside the highlighted source_text.
+- Choose the option that best matches the local sentence context.
+- Prefer adding a stress mark only when it genuinely helps the Russian TTS model avoid the wrong reading.
+- Leave the original option if the context is insufficient or the pronunciation is not clearly determined.
+- Set cacheable to true only if the best choice is stable for the same source_text regardless of wider context.
+- Do not rewrite surrounding context. Only choose among the provided options for the highlighted source_text unless a clearly better custom_text is necessary."""
+)
+
+BUILTIN_STRESS_AMBIGUITY_VARIANTS_RAW = {
+    "атлас": ("+атлас", "атл+ас"),
+    "беды": ("б+еды", "бед+ы"),
+    "духи": ("д+ухи", "дух+и"),
+    "замок": ("з+амок", "зам+ок"),
+    "муки": ("м+уки", "мук+и"),
+    "плачу": ("пл+ачу", "плач+у"),
+    "поступи": ("п+оступи", "поступ+и"),
+}
+
+
+@dataclass(frozen=True)
+class StressAmbiguityCandidate:
+    item_id: str
+    start: int
+    end: int
+    source_text: str
+    context: str
+    options: tuple[NormalizerLLMChoiceOption, ...]
+
+    def to_choice_item(self) -> NormalizerLLMChoiceItem:
+        return NormalizerLLMChoiceItem(
+            item_id=self.item_id,
+            source_text=self.source_text,
+            context=self.context,
+            options=self.options,
+            note="Choose the stress or pronunciation variant that best fits this sentence.",
+        )
+
+
+class StressAmbiguityLLMNormalizer(BaseNormalizer):
+    STEP_NAME = "stress_ambiguity_llm"
+    STEP_VERSION = 1
+
+    def __init__(self, config: GeneralConfig):
+        self.variants = self._load_variants(config)
+        self._planned_text = ""
+        self._planned_candidates: dict[str, StressAmbiguityCandidate] = {}
+        self._planned_order: list[str] = []
+        self._last_selections: dict[str, NormalizerLLMChoiceSelection] = {}
+        super().__init__(config)
+        self.choice_service = NormalizerLLMChoiceService(self.get_normalizer_llm())
+
+    def validate_config(self):
+        if not self.has_normalizer_llm():
+            raise ValueError(
+                "stress_ambiguity_llm requires a configured LLM endpoint. "
+                "Set normalize_base_url / normalize_api_key or the matching environment variables."
+            )
+
+    def supports_chunked_resume(self) -> bool:
+        return True
+
+    def get_resume_signature(self) -> dict:
+        llm = self.get_normalizer_llm()
+        return {
+            **super().get_resume_signature(),
+            "provider": llm.settings.provider,
+            "model": llm.settings.model,
+            "base_url": llm.settings.base_url,
+            "max_chars": llm.settings.max_chars,
+            "choice_system_prompt": STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            "variants": sorted((key, list(values)) for key, values in self.variants.items()),
+        }
+
+    def normalize(self, text: str, chapter_title: str = "") -> str:
+        if not is_russian_language(self.config.language):
+            logger.info(
+                "stress_ambiguity_llm skipped for chapter '%s' because language is '%s'",
+                chapter_title,
+                self.config.language,
+            )
+            return text
+
+        units = self.plan_processing_units(text, chapter_title=chapter_title)
+        processed_units = [
+            self.process_unit(
+                unit,
+                chapter_title=chapter_title,
+                unit_index=index,
+                unit_count=len(units),
+            )
+            for index, unit in enumerate(units, start=1)
+        ]
+        return self.merge_processed_units(processed_units, chapter_title=chapter_title)
+
+    def plan_processing_units(self, text: str, chapter_title: str = "") -> list[str]:
+        if not is_russian_language(self.config.language):
+            self._planned_text = text
+            self._planned_candidates = {}
+            self._planned_order = []
+            return []
+
+        candidates = self._collect_candidates(text)
+        self._planned_text = text
+        self._planned_candidates = {candidate.item_id: candidate for candidate in candidates}
+        self._planned_order = [candidate.item_id for candidate in candidates]
+        self._last_selections = {}
+        batches = self.choice_service.plan_batches(
+            [candidate.to_choice_item() for candidate in candidates],
+            system_prompt=STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+        )
+        return [self._serialize_batch(batch) for batch in batches]
+
+    def process_unit(
+        self,
+        unit: str,
+        *,
+        chapter_title: str = "",
+        unit_index: int,
+        unit_count: int,
+    ) -> str:
+        batch = self._deserialize_batch(unit)
+        logger.info(
+            "Choosing stress ambiguities for chapter '%s' batch %s/%s, items=%s",
+            chapter_title,
+            unit_index,
+            unit_count,
+            len(batch),
+        )
+        selections = self.choice_service.choose_batch(
+            batch,
+            target_language=self.config.language,
+            system_prompt=STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            model=self.config.normalize_model,
+            temperature=0,
+        )
+        normalized_selections = {
+            item_id: self._coerce_selection(item_id, selection)
+            for item_id, selection in selections.items()
+        }
+        return json.dumps(
+            {
+                "selections": [
+                    {
+                        "id": item_id,
+                        "option_id": selection.option_id,
+                        "custom_text": selection.custom_text or "",
+                        "cacheable": bool(selection.cacheable),
+                        "reason": selection.reason or "",
+                        "source": selection.source,
+                    }
+                    for item_id, selection in normalized_selections.items()
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    def merge_processed_units(
+        self,
+        processed_units: list[str],
+        *,
+        chapter_title: str = "",
+    ) -> str:
+        if not self._planned_candidates:
+            return self._planned_text
+
+        selections: dict[str, NormalizerLLMChoiceSelection] = {}
+        for processed in processed_units:
+            if not processed.strip():
+                continue
+            selections.update(self.choice_service.parse_choice_response_objects(processed))
+
+        normalized = self._planned_text
+        replacements = 0
+        self._last_selections = selections
+        for candidate in sorted(
+            self._planned_candidates.values(),
+            key=lambda item: item.start,
+            reverse=True,
+        ):
+            selection = selections.get(
+                candidate.item_id,
+                NormalizerLLMChoiceSelection(item_id=candidate.item_id, option_id="original"),
+            )
+            replacement_text = normalize_stress_marks(
+                self._resolve_selected_text(candidate, selection)
+            )
+            if replacement_text == candidate.source_text:
+                continue
+            normalized = (
+                normalized[: candidate.start]
+                + replacement_text
+                + normalized[candidate.end :]
+            )
+            replacements += 1
+
+        logger.info(
+            "stress_ambiguity_llm applied to chapter '%s': %s replacements",
+            chapter_title,
+            replacements,
+        )
+        return normalized
+
+    def get_step_artifacts(self, text: str, chapter_title: str = "") -> dict[str, str]:
+        candidates = self._collect_candidates(text)
+        manifest = [
+            {
+                "id": candidate.item_id,
+                "source_text": candidate.source_text,
+                "context": candidate.context,
+                "options": [
+                    {"id": option.option_id, "text": option.text}
+                    for option in candidate.options
+                ],
+            }
+            for candidate in candidates
+        ]
+        return {
+            "00_choice_system_prompt.txt": STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            "01_choice_settings.json": self.choice_service.render_settings_json(
+                system_prompt=STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            ),
+            "02_candidates.json": json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        }
+
+    def get_post_step_artifacts(
+        self,
+        *,
+        input_text: str,
+        output_text: str,
+        chapter_title: str = "",
+    ) -> dict[str, str]:
+        if not self._planned_candidates:
+            return {}
+
+        case_lines: list[str] = []
+        stats = {
+            "chapter_title": chapter_title,
+            "total_candidates": len(self._planned_candidates),
+            "changed_candidates": 0,
+            "selection_counts": {},
+            "selection_source_counts": {},
+        }
+
+        option_counts: dict[str, int] = {}
+        source_counts: dict[str, int] = {}
+        for candidate_id in self._planned_order:
+            candidate = self._planned_candidates[candidate_id]
+            selection = self._last_selections.get(
+                candidate_id,
+                NormalizerLLMChoiceSelection(item_id=candidate_id, option_id="original"),
+            )
+            resolved = self._resolve_selected_text(candidate, selection)
+            option_id = selection.option_id or ("custom" if selection.has_custom_text else "original")
+            option_counts[option_id] = option_counts.get(option_id, 0) + 1
+            source_counts[selection.source] = source_counts.get(selection.source, 0) + 1
+
+            changed = resolved != candidate.source_text
+            if changed:
+                stats["changed_candidates"] += 1
+
+            case_lines.extend(
+                [
+                    f"id: {candidate.item_id}",
+                    f"changed: {'yes' if changed else 'no'}",
+                    f"source_text: {candidate.source_text}",
+                    f"selected_option: {option_id}",
+                    f"selected_source: {selection.source}",
+                    f"selected_text: {resolved}",
+                    f"cacheable: {selection.cacheable}",
+                    f"reason: {selection.reason or ''}",
+                    f"context: {candidate.context}",
+                    "options:",
+                ]
+            )
+            for option in candidate.options:
+                case_lines.append(f"  - {option.option_id}: {option.text}")
+            if selection.has_custom_text:
+                case_lines.append(f"  - custom: {selection.custom_text}")
+            case_lines.append("")
+
+        stats["selection_counts"] = option_counts
+        stats["selection_source_counts"] = source_counts
+
+        report_lines = [
+            "# stress_ambiguity_llm selection report",
+            "",
+            f"- chapter_title: {chapter_title}",
+            f"- total_candidates: {stats['total_candidates']}",
+            f"- changed_candidates: {stats['changed_candidates']}",
+            f"- selection_counts: {json.dumps(stats['selection_counts'], ensure_ascii=False, sort_keys=True)}",
+            f"- selection_source_counts: {json.dumps(stats['selection_source_counts'], ensure_ascii=False, sort_keys=True)}",
+            "",
+            "## Cases",
+            "",
+        ]
+        if case_lines:
+            report_lines.extend(case_lines)
+        else:
+            report_lines.append("No cases.")
+            report_lines.append("")
+
+        return {
+            "92_selection_report.txt": "\n".join(report_lines),
+            "93_selection_stats.json": json.dumps(stats, ensure_ascii=False, indent=2) + "\n",
+        }
+
+    def get_unit_artifacts(
+        self,
+        unit: str,
+        *,
+        chapter_title: str = "",
+        unit_index: int,
+        unit_count: int,
+    ) -> dict[str, str]:
+        batch = self._deserialize_batch(unit)
+        return {
+            "00_choice_system_prompt.txt": STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            "01_choice_user_prompt.txt": self.choice_service.render_user_prompt(
+                batch,
+                target_language=self.config.language,
+            ),
+        }
+
+    def _collect_candidates(self, text: str) -> list[StressAmbiguityCandidate]:
+        candidates: list[StressAmbiguityCandidate] = []
+        item_index = 1
+        for match in AMBIGUOUS_WORD_PATTERN.finditer(text):
+            source_text = match.group(0)
+            if COMBINING_ACUTE in source_text:
+                continue
+            key = strip_combining_acute(source_text).lower()
+            variants = self.variants.get(key)
+            if not variants:
+                continue
+            options = self._build_options(source_text, variants)
+            if len(options) < 2:
+                continue
+            item_id = f"stress_ambiguity_{item_index:04d}"
+            item_index += 1
+            candidates.append(
+                StressAmbiguityCandidate(
+                    item_id=item_id,
+                    start=match.start(),
+                    end=match.end(),
+                    source_text=source_text,
+                    context=self._extract_context(text, match.start(), match.end()),
+                    options=options,
+                )
+            )
+        return candidates
+
+    def _build_options(
+        self,
+        source_text: str,
+        variants: tuple[str, ...],
+    ) -> tuple[NormalizerLLMChoiceOption, ...]:
+        options: list[NormalizerLLMChoiceOption] = [
+            NormalizerLLMChoiceOption("original", source_text)
+        ]
+        seen_texts = {source_text}
+        for index, variant in enumerate(variants, start=1):
+            preserved = normalize_stress_marks(
+                preserve_case(strip_combining_acute(source_text), variant)
+            )
+            if not preserved or preserved in seen_texts:
+                continue
+            options.append(
+                NormalizerLLMChoiceOption(
+                    option_id=f"variant_{index}",
+                    text=preserved,
+                )
+            )
+            seen_texts.add(preserved)
+        return tuple(options)
+
+    def _extract_context(self, text: str, start: int, end: int) -> str:
+        left = start
+        while left > 0 and text[left - 1] not in ".!?\n":
+            left -= 1
+        right = end
+        while right < len(text) and text[right] not in ".!?\n":
+            right += 1
+        return text[left:right].strip()
+
+    @staticmethod
+    def _resolve_selected_text(
+        candidate: StressAmbiguityCandidate,
+        selection: NormalizerLLMChoiceSelection,
+    ) -> str:
+        if selection.has_custom_text:
+            return selection.custom_text or candidate.source_text
+        for option in candidate.options:
+            if option.option_id == selection.resolved_option_id():
+                return option.text
+        return candidate.source_text
+
+    @staticmethod
+    def _serialize_batch(batch: list[NormalizerLLMChoiceItem]) -> str:
+        return json.dumps(
+            {
+                "items": [
+                    {
+                        "id": item.item_id,
+                        "source_text": item.source_text,
+                        "context": item.context,
+                        "note": item.note or "",
+                        "options": [
+                            {"id": option.option_id, "text": option.text}
+                            for option in item.options
+                        ],
+                    }
+                    for item in batch
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    @staticmethod
+    def _deserialize_batch(serialized_batch: str) -> list[NormalizerLLMChoiceItem]:
+        payload = json.loads(serialized_batch)
+        items: list[NormalizerLLMChoiceItem] = []
+        for raw_item in payload.get("items", []):
+            items.append(
+                NormalizerLLMChoiceItem(
+                    item_id=raw_item["id"],
+                    source_text=raw_item["source_text"],
+                    context=raw_item["context"],
+                    note=raw_item.get("note") or None,
+                    options=tuple(
+                        NormalizerLLMChoiceOption(
+                            option_id=raw_option["id"],
+                            text=raw_option["text"],
+                        )
+                        for raw_option in raw_item.get("options", [])
+                    ),
+                )
+            )
+        return items
+
+    @staticmethod
+    def _coerce_selection(
+        item_id: str,
+        selection: NormalizerLLMChoiceSelection | str,
+    ) -> NormalizerLLMChoiceSelection:
+        if isinstance(selection, NormalizerLLMChoiceSelection):
+            return selection
+        return NormalizerLLMChoiceSelection(item_id=item_id, option_id=str(selection))
+
+    @staticmethod
+    def _load_variants(config: GeneralConfig) -> dict[str, tuple[str, ...]]:
+        variants = {
+            key: tuple(
+                normalize_stress_marks(plus_stress_to_combining_acute(option))
+                for option in options
+            )
+            for key, options in BUILTIN_STRESS_AMBIGUITY_VARIANTS_RAW.items()
+        }
+        file_variants = load_choice_mapping_file(
+            getattr(config, "normalize_stress_ambiguity_file", None)
+        )
+        for key, options in file_variants.items():
+            variants[strip_combining_acute(key).lower()] = tuple(
+                normalize_stress_marks(option)
+                for option in options
+            )
+        return variants

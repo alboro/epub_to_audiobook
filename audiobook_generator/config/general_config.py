@@ -72,6 +72,9 @@ class GeneralConfig:
         self.normalize_stress_exceptions_file = getattr(
             args, 'normalize_stress_exceptions_file', None
         )
+        self.normalize_stress_ambiguity_file = getattr(
+            args, 'normalize_stress_ambiguity_file', None
+        )
         self.normalize_tsnorm_stress_yo = getattr(args, 'normalize_tsnorm_stress_yo', None)
         self.normalize_tsnorm_stress_monosyllabic = getattr(
             args, 'normalize_tsnorm_stress_monosyllabic', None

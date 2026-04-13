@@ -10,14 +10,17 @@ from audiobook_generator.normalizers.base_normalizer import BaseNormalizer
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SAFE_MAX_CHARS = 160
+DEFAULT_SAFE_MAX_CHARS = 180
 MIN_SPLIT_FRACTION = 0.45
+MIN_SPLIT_FRAGMENT_CHARS = 24
+MIN_SPLIT_FRAGMENT_WORDS = 2
 LEFT_TRIM_CHARS = " \t\r\n,;:-–—"
 RIGHT_TRIM_CHARS = " \t\r\n,;:-–—"
 SENTENCE_END_CHARS = ".!?"
 
 PRIORITY_PATTERNS = (
     re.compile(r"[;:](?=\s|$)"),
+    re.compile(r"\s+(?=(?:и|а|но|однако)\b)", re.IGNORECASE),
     re.compile(r",\s+(?=(?:а также|однако|но|зато|поэтому|причем|притом|при этом|затем|потом)\b)", re.IGNORECASE),
     re.compile(
         r",\s+(?=(?:котор(?:ый|ая|ое|ые|ого|ому|ым|ых|ую|ой|ою)|обосновывающ\w*|существующ\w*|позволяющ\w*|делающ\w*|создающ\w*)\b)",
@@ -104,7 +107,7 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
 
             left = current[:split_index].rstrip(LEFT_TRIM_CHARS)
             right = current[split_index:].lstrip(RIGHT_TRIM_CHARS)
-            if not left or not right:
+            if not left or not right or not self._is_acceptable_split(left, right):
                 result.append(self._finalize_sentence(current))
                 continue
 
@@ -121,15 +124,45 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
         window = sentence[: self.max_chars + 1]
 
         for pattern in PRIORITY_PATTERNS:
-            matches = [match for match in pattern.finditer(window) if match.end() >= min_index]
-            if matches:
-                return matches[-1].end()
+            candidate_indexes = [
+                match.end()
+                for match in pattern.finditer(window)
+                if match.end() >= min_index
+            ]
+            split_index = self._select_best_candidate(sentence, candidate_indexes)
+            if split_index is not None:
+                return split_index
 
-        space_index = window.rfind(" ")
-        if space_index >= min_index:
-            return space_index + 1
+        space_indexes = [
+            index + 1
+            for index, char in enumerate(window)
+            if char == " " and index + 1 >= min_index
+        ]
+        split_index = self._select_best_candidate(sentence, space_indexes)
+        if split_index is not None:
+            return split_index
 
         return self.max_chars
+
+    def _select_best_candidate(self, sentence: str, candidate_indexes: list[int]) -> int | None:
+        for split_index in sorted(candidate_indexes, reverse=True):
+            left = sentence[:split_index].rstrip(LEFT_TRIM_CHARS)
+            right = sentence[split_index:].lstrip(RIGHT_TRIM_CHARS)
+            if left and right and self._is_acceptable_split(left, right):
+                return split_index
+        return None
+
+    def _is_acceptable_split(self, left: str, right: str) -> bool:
+        if not left or not right:
+            return False
+
+        left_words = [word for word in left.split() if word]
+        right_words = [word for word in right.split() if word]
+        if len(left) < MIN_SPLIT_FRAGMENT_CHARS and len(left_words) < MIN_SPLIT_FRAGMENT_WORDS:
+            return False
+        if len(right) < MIN_SPLIT_FRAGMENT_CHARS and len(right_words) < MIN_SPLIT_FRAGMENT_WORDS:
+            return False
+        return True
 
     def _normalize_sentence_start(self, sentence: str) -> str:
         sentence = sentence.lstrip()
