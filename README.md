@@ -50,6 +50,7 @@ Useful options:
 - `--normalize-system-prompt-file /path/to/ru_prompt.txt`
 - `--prepare-text`
 - `--prepared-text-folder /path/to/reviewed_text`
+- `--normalize-pronunciation-lexicon-db /path/to/ru_pronunciation_lexicon.sqlite3`
 
 Review-first workflow with reused chapter files:
 
@@ -87,7 +88,7 @@ Normalizer prompts can be customized per run from text files:
 
 - `--normalize_system_prompt_file path.txt`
 - `--normalize_user_prompt_file path.txt`
-- `--normalize_steps simple_symbols,initials_ru,tts_pronunciation_overrides,numbers_ru,stress_ambiguity_llm,tts_safe_split,llm`
+- `--normalize_steps simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,proper_nouns_pronunciation_ru,tts_safe_split`
 
 The user prompt template supports these placeholders:
 
@@ -107,6 +108,23 @@ Shared LLM settings for any normalizer step that wants them:
 - `--normalize_system_prompt_file`
 - `--normalize_user_prompt_file`
 
+Shared pronunciation/stress lexicon settings:
+
+- `--normalize_pronunciation_lexicon_db`
+
+This SQLite database is a reusable local index of TTS-oriented word forms. On the first run that requests it, the project can build a cached database from the packaged `tsnorm` dictionary. The current schema is:
+
+- `surface_form`
+- `spoken_form`
+- `lemma`
+- `pos`
+- `grammemes`
+- `is_proper_name`
+- `source`
+- `confidence`
+
+Here `spoken_form` means "the form we want to feed into TTS". For `tsnorm`-derived entries this currently means the same written word with stress marks inserted when the dictionary provides them. That is already useful for contextual stress disambiguation, even before a future phonetic/G2P source is added for cases like `Пейн -> Пэйн`.
+
 Built-in normalizer steps:
 
 - `simple_symbols`
@@ -120,7 +138,7 @@ Built-in normalizer steps:
   Example: `Е. Д. Калашниковой` -> `Е-Дэ Калашниковой`.
 - `tts_pronunciation_overrides`
   Applies deterministic XTTS-specific pronunciation overrides for known problematic Russian words.
-  Built-in examples include `отель` -> `отэль`.
+  This step is optional and is no longer part of the default recipe chain.
   Use `--normalize_tts_pronunciation_overrides_file path.txt` to add your own `source==replacement` rules.
 - `numbers_ru`
   Deterministically expands many Russian number forms before TTS:
@@ -137,6 +155,7 @@ Built-in normalizer steps:
   and asks an OpenAI-compatible LLM to choose the best option from context.
   This is designed for real homographs such as `беды` or `поступи`, where a global replacement
   would be unsafe but full-text rewriting would be excessive.
+  When `--normalize_pronunciation_lexicon_db` is set, this step can also pull ambiguous variants from the shared SQLite lexicon built from `tsnorm`.
   Use `--normalize_stress_ambiguity_file path.txt` to add more entries in the form
   `source==variant1|variant2`, with either combining acute accents or Silero-style plus notation
   like `б+еды|бед+ы`.
@@ -168,16 +187,16 @@ Use `--normalize_tts_safe_max_chars 180` to tune the target sentence length.
 
 Recommended chain for Russian XTTS:
 
-- `simple_symbols,initials_ru,tts_pronunciation_overrides,numbers_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,tts_pronunciation_overrides,proper_nouns_pronunciation_ru,tts_safe_split`
+- `simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,proper_nouns_pronunciation_ru,tts_safe_split`
 
 This lets deterministic steps handle typography, obvious numerals, and sentence length,
 while the LLM focuses on the harder context-dependent rewrites. The repeated post-LLM cleanup
-steps are intentional: they restore initials, pronunciation overrides, sparse stress marks,
+steps are intentional: they restore initials, sparse stress marks,
 and contextual proper-name pronunciation if the LLM drifts back toward riskier forms.
 
 Optional stronger accent chain:
 
-- `simple_symbols,initials_ru,tts_pronunciation_overrides,numbers_ru,tsnorm_ru,llm,simple_symbols,initials_ru,tts_pronunciation_overrides,tsnorm_ru,tts_safe_split`
+- `simple_symbols,initials_ru,numbers_ru,tsnorm_ru,llm,simple_symbols,initials_ru,tsnorm_ru,tts_safe_split`
 
 Notes:
 

@@ -10,6 +10,10 @@ from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNor
 from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
 from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
 from audiobook_generator.normalizers.pipeline_runner import NormalizationPipelineRunner
+from audiobook_generator.normalizers.pronunciation_lexicon_db import (
+    PronunciationLexiconDB,
+    build_tsnorm_pronunciation_lexicon,
+)
 from audiobook_generator.normalizers.proper_nouns_pronunciation_ru_normalizer import (
     ProperNounsPronunciationRuNormalizer,
 )
@@ -95,6 +99,7 @@ def make_config(**overrides):
         normalize_tts_safe_max_chars=180,
         normalize_pronunciation_exceptions_file=None,
         normalize_tts_pronunciation_overrides_file=None,
+        normalize_pronunciation_lexicon_db=None,
         normalize_stress_exceptions_file=None,
         normalize_stress_ambiguity_file=None,
         normalize_tsnorm_stress_yo=True,

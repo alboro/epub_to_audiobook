@@ -46,6 +46,7 @@ test.py
 
 logs/
 .local/
+.cache/
 .venv/
 .venv_py311_broken_*/
 out/

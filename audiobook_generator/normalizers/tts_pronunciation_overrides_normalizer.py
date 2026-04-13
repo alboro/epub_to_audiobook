@@ -13,7 +13,7 @@ from audiobook_generator.normalizers.ru_text_utils import (
 
 logger = logging.getLogger(__name__)
 
-BUILTIN_TTS_PRONUNCIATION_OVERRIDES = {
+BUILTIN_TTS_PRONUNCIATION_OVERRIDES: dict[str, str] = {
     "отель": "отэль",
     "отеля": "отэля",
     "отелю": "отэлю",
@@ -56,7 +56,11 @@ class TTSPronunciationOverridesNormalizer(BaseNormalizer):
 
         normalized = text
         replacements = 0
-        for source, replacement in sorted(self.replacements.items(), key=lambda item: len(item[0]), reverse=True):
+        for source, replacement in sorted(
+            self.replacements.items(),
+            key=lambda item: len(item[0]),
+            reverse=True,
+        ):
             pattern = self._build_pattern(source)
             normalized, count = pattern.subn(
                 lambda match: preserve_case(match.group(0), replacement),

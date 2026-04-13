@@ -8,11 +8,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from audiobook_generator.normalizers.pronunciation_lexicon_db import (
+    get_default_pronunciation_lexicon_db_path,
+)
 
 DEFAULT_NORMALIZE_STEPS = (
-    "simple_symbols,initials_ru,tts_pronunciation_overrides,"
-    "numbers_ru,stress_ambiguity_llm,llm,simple_symbols,"
-    "initials_ru,tts_pronunciation_overrides,proper_nouns_pronunciation_ru,tts_safe_split"
+    "simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,"
+    "simple_symbols,initials_ru,proper_nouns_pronunciation_ru,tts_safe_split"
 )
 DEFAULT_NORMALIZE_MODEL = "gpt-5.4"
 DEFAULT_VOICE_NAME = "reference_long"
@@ -67,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--normalize-base-url",
         default=os.getenv("NORMALIZER_OPENAI_BASE_URL"),
         help="Normalizer base URL. Defaults to NORMALIZER_OPENAI_BASE_URL.",
+    )
+    parser.add_argument(
+        "--normalize-pronunciation-lexicon-db",
+        default=str(get_default_pronunciation_lexicon_db_path()),
+        help="SQLite path for the shared pronunciation/stress lexicon.",
     )
     parser.add_argument("--normalize-system-prompt-file", help="Optional custom system prompt file.")
     parser.add_argument(
@@ -236,6 +243,8 @@ def main() -> int:
             str(args.normalize_max_chars),
             "--normalize_tts_safe_max_chars",
             str(args.normalize_tts_safe_max_chars),
+            "--normalize_pronunciation_lexicon_db",
+            args.normalize_pronunciation_lexicon_db,
         ]
 
     if prepared_text_folder is not None:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import io
+import pickle
 import sys
 import types
 from importlib import resources
+from pathlib import Path
 
 
 def install_pkg_resources_compat():
@@ -50,6 +53,16 @@ def create_tsnorm_backend(
     )
 
 
+def load_tsnorm_dictionary_data():
+    package_dir = _resolve_package_dir("tsnorm")
+    dictionary_dir = package_dir / "dictionary"
+    with (dictionary_dir / "wordforms.dat").open("rb") as stream:
+        word_forms = pickle.load(stream)
+    with (dictionary_dir / "lemmas.dat").open("rb") as stream:
+        lemmas = pickle.load(stream)
+    return word_forms, lemmas
+
+
 def _resolve_package_name(package_or_requirement):
     if hasattr(package_or_requirement, "__spec__"):
         package_name = package_or_requirement.__spec__.name
@@ -60,3 +73,10 @@ def _resolve_package_name(package_or_requirement):
     if getattr(module, "__spec__", None) and module.__spec__.submodule_search_locations is None:
         return module.__package__ or package_name.rpartition(".")[0]
     return package_name
+
+
+def _resolve_package_dir(package_name: str) -> Path:
+    spec = importlib.util.find_spec(package_name)
+    if not spec or not spec.submodule_search_locations:
+        raise ImportError(f"Unable to locate package directory for {package_name!r}")
+    return Path(next(iter(spec.submodule_search_locations)))

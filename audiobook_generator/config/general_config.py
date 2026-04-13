@@ -71,6 +71,9 @@ class GeneralConfig:
             or getattr(args, 'normalize_pronunciation_exceptions_file', None)
         )
         self.normalize_pronunciation_exceptions_file = self.normalize_tts_pronunciation_overrides_file
+        self.normalize_pronunciation_lexicon_db = getattr(
+            args, 'normalize_pronunciation_lexicon_db', None
+        )
         self.normalize_stress_exceptions_file = getattr(
             args, 'normalize_stress_exceptions_file', None
         )
