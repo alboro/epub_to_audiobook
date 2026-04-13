@@ -79,7 +79,7 @@ class StressAmbiguityCandidate:
 
 class StressAmbiguityLLMNormalizer(BaseNormalizer):
     STEP_NAME = "stress_ambiguity_llm"
-    STEP_VERSION = 1
+    STEP_VERSION = 2
 
     def __init__(self, config: GeneralConfig):
         self.variants = self._load_variants(config)
@@ -394,6 +394,11 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
             if COMBINING_ACUTE in source_text:
                 continue
             key = strip_combining_acute(source_text).lower()
+            if key not in self.variants:
+                # The pronunciation lexicon is our source of candidate options,
+                # not a broad "accent everything ambiguous" discovery list.
+                # We only send curated ambiguity cases to the LLM.
+                continue
             variants = self._resolve_variants(key)
             if not variants:
                 continue

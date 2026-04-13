@@ -208,5 +208,43 @@ class TestStressAmbiguityLLMWithLexiconDB(unittest.TestCase):
             self.assertIn(f"беды{COMBINING_ACUTE}", option_texts)
 
 
+class TestStressAmbiguityLexiconCandidateFiltering(unittest.TestCase):
+    def test_db_only_ambiguous_words_are_not_candidates_by_default(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            database = PronunciationLexiconDB(db_path)
+            build_tsnorm_pronunciation_lexicon(
+                database,
+                word_forms={
+                    "слова": [
+                        {
+                            "word_form": "слова",
+                            "stress_pos": [2],
+                            "form_tags": "genitive singular",
+                            "lemma": "слово",
+                        },
+                        {
+                            "word_form": "слова",
+                            "stress_pos": [4],
+                            "form_tags": "nominative plural",
+                            "lemma": "слово",
+                        },
+                    ]
+                },
+                lemmas={"слово": {"pos": ["NOUN"], "rank": 1}},
+            )
+            normalizer = StressAmbiguityLLMNormalizer(
+                make_config(
+                    normalize_pronunciation_lexicon_db=str(db_path),
+                    normalize_stress_ambiguity_file=None,
+                )
+            )
+            units = normalizer.plan_processing_units(
+                "Но необходимо взвесить приведенные слова.",
+                chapter_title="Test",
+            )
+            self.assertEqual(units, [])
+
+
 if __name__ == "__main__":
     unittest.main()
