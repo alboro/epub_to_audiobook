@@ -87,7 +87,7 @@ Normalizer prompts can be customized per run from text files:
 
 - `--normalize_system_prompt_file path.txt`
 - `--normalize_user_prompt_file path.txt`
-- `--normalize_steps simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,stress_ambiguity_llm,tts_safe_split,llm`
+- `--normalize_steps simple_symbols,initials_ru,tts_pronunciation_overrides,numbers_ru,stress_ambiguity_llm,tts_safe_split,llm`
 
 The user prompt template supports these placeholders:
 
@@ -118,10 +118,10 @@ Built-in normalizer steps:
 - `initials_ru`
   Rewrites Russian initials before surnames into XTTS-friendlier spoken forms.
   Example: `Е. Д. Калашниковой` -> `Е-Дэ Калашниковой`.
-- `pronunciation_exceptions_ru`
-  Applies deterministic pronunciation overrides for known problematic Russian words.
+- `tts_pronunciation_overrides`
+  Applies deterministic XTTS-specific pronunciation overrides for known problematic Russian words.
   Built-in examples include `отель` -> `отэль`.
-  Use `--normalize_pronunciation_exceptions_file path.txt` to add your own `source==replacement` rules.
+  Use `--normalize_tts_pronunciation_overrides_file path.txt` to add your own `source==replacement` rules.
 - `numbers_ru`
   Deterministically expands many Russian number forms before TTS:
   plain integers, `№5`, ranges, common ordinal abbreviations like `17-й`,
@@ -131,6 +131,7 @@ Built-in normalizer steps:
   Adds stress marks only for a curated list of problem words instead of accenting the whole text.
   Built-in examples include `чудес` -> `чуде́с`, `чудеса` -> `чудеса́`.
   Use `--normalize_stress_exceptions_file path.txt` to extend the list.
+  This step is kept as a legacy fallback, but the default recipe now prefers `stress_ambiguity_llm`.
 - `stress_ambiguity_llm`
   Finds only known ambiguous Russian word forms, builds a small set of valid stress variants,
   and asks an OpenAI-compatible LLM to choose the best option from context.
@@ -167,7 +168,7 @@ Use `--normalize_tts_safe_max_chars 180` to tune the target sentence length.
 
 Recommended chain for Russian XTTS:
 
-- `simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,stress_words_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,pronunciation_exceptions_ru,stress_words_ru,proper_nouns_pronunciation_ru,tts_safe_split`
+- `simple_symbols,initials_ru,tts_pronunciation_overrides,numbers_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,tts_pronunciation_overrides,proper_nouns_pronunciation_ru,tts_safe_split`
 
 This lets deterministic steps handle typography, obvious numerals, and sentence length,
 while the LLM focuses on the harder context-dependent rewrites. The repeated post-LLM cleanup
@@ -176,9 +177,9 @@ and contextual proper-name pronunciation if the LLM drifts back toward riskier f
 
 Optional stronger accent chain:
 
-- `simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,tsnorm_ru,llm,simple_symbols,initials_ru,pronunciation_exceptions_ru,tsnorm_ru,tts_safe_split`
+- `simple_symbols,initials_ru,tts_pronunciation_overrides,numbers_ru,tsnorm_ru,llm,simple_symbols,initials_ru,tts_pronunciation_overrides,tsnorm_ru,tts_safe_split`
 
 Notes:
 
 - `tsnorm_ru` currently expects a Python `3.10-3.12` environment because the upstream package does not publish wheels for newer Python versions.
-- The safest way to use accents with XTTS is still selective: start with `stress_words_ru`, then only opt into `tsnorm_ru` if that specific book needs broader help.
+- The safest way to use accents with XTTS is still selective: prefer `stress_ambiguity_llm` for real homographs, keep `stress_words_ru` only as a narrow fallback, and only opt into `tsnorm_ru` if that specific book needs broader help.

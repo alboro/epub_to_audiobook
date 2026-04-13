@@ -14,8 +14,8 @@ from audiobook_generator.normalizers.proper_nouns_pronunciation_ru_normalizer im
     ProperNounsPronunciationRuNormalizer,
 )
 from audiobook_generator.normalizers.proper_nouns_ru_normalizer import ProperNounsRuNormalizer
-from audiobook_generator.normalizers.pronunciation_exceptions_ru_normalizer import (
-    PronunciationExceptionsRuNormalizer,
+from audiobook_generator.normalizers.tts_pronunciation_overrides_normalizer import (
+    TTSPronunciationOverridesNormalizer,
 )
 from audiobook_generator.normalizers.ru_text_utils import (
     COMBINING_ACUTE,
@@ -94,6 +94,7 @@ def make_config(**overrides):
         normalize_max_chars=4000,
         normalize_tts_safe_max_chars=180,
         normalize_pronunciation_exceptions_file=None,
+        normalize_tts_pronunciation_overrides_file=None,
         normalize_stress_exceptions_file=None,
         normalize_stress_ambiguity_file=None,
         normalize_tsnorm_stress_yo=True,
@@ -224,9 +225,9 @@ class TestDeterministicRuNormalizers(unittest.TestCase):
             "вкратце о Е-Дэ-Калашниковой",
         )
 
-    def test_pronunciation_exceptions_ru(self):
-        normalizer = PronunciationExceptionsRuNormalizer(
-            make_config(normalize_steps="pronunciation_exceptions_ru")
+    def test_tts_pronunciation_overrides(self):
+        normalizer = TTSPronunciationOverridesNormalizer(
+            make_config(normalize_steps="tts_pronunciation_overrides")
         )
         self.assertEqual(
             normalizer.normalize("Отель расположен рядом."),

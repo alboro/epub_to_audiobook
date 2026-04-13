@@ -66,9 +66,11 @@ class GeneralConfig:
         self.normalize_base_url = getattr(args, 'normalize_base_url', None)
         self.normalize_max_chars = getattr(args, 'normalize_max_chars', None)
         self.normalize_tts_safe_max_chars = getattr(args, 'normalize_tts_safe_max_chars', None)
-        self.normalize_pronunciation_exceptions_file = getattr(
-            args, 'normalize_pronunciation_exceptions_file', None
+        self.normalize_tts_pronunciation_overrides_file = (
+            getattr(args, 'normalize_tts_pronunciation_overrides_file', None)
+            or getattr(args, 'normalize_pronunciation_exceptions_file', None)
         )
+        self.normalize_pronunciation_exceptions_file = self.normalize_tts_pronunciation_overrides_file
         self.normalize_stress_exceptions_file = getattr(
             args, 'normalize_stress_exceptions_file', None
         )

@@ -8,7 +8,7 @@ NORMALIZER_SIMPLE_SYMBOLS = "simple_symbols"
 NORMALIZER_TTS_SAFE_SPLIT = "tts_safe_split"
 NORMALIZER_NUMBERS_RU = "numbers_ru"
 NORMALIZER_INITIALS_RU = "initials_ru"
-NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU = "pronunciation_exceptions_ru"
+NORMALIZER_TTS_PRONUNCIATION_OVERRIDES = "tts_pronunciation_overrides"
 NORMALIZER_STRESS_WORDS_RU = "stress_words_ru"
 NORMALIZER_STRESS_AMBIGUITY_LLM = "stress_ambiguity_llm"
 NORMALIZER_TSNORM_RU = "tsnorm_ru"
@@ -110,7 +110,7 @@ def get_supported_normalizers() -> List[str]:
         NORMALIZER_OPENAI,
         NORMALIZER_SIMPLE_SYMBOLS,
         NORMALIZER_INITIALS_RU,
-        NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
+        NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
         NORMALIZER_STRESS_WORDS_RU,
         NORMALIZER_STRESS_AMBIGUITY_LLM,
         NORMALIZER_PROPER_NOUNS_RU,
@@ -195,10 +195,13 @@ def normalize_step_name(step: str) -> str:
         NORMALIZER_INITIALS_RU: NORMALIZER_INITIALS_RU,
         "initials": NORMALIZER_INITIALS_RU,
         "ru_initials": NORMALIZER_INITIALS_RU,
-        NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU: NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
-        "pronunciation": NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
-        "pronunciation_exceptions": NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
-        "ru_pronunciation": NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU,
+        NORMALIZER_TTS_PRONUNCIATION_OVERRIDES: NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
+        "pronunciation": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
+        "pronunciation_exceptions": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
+        "pronunciation_exceptions_ru": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
+        "ru_pronunciation": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
+        "tts_pronunciation": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
+        "tts_pronunciation_overrides_ru": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
         NORMALIZER_STRESS_WORDS_RU: NORMALIZER_STRESS_WORDS_RU,
         "stress_words": NORMALIZER_STRESS_WORDS_RU,
         "stress_overrides": NORMALIZER_STRESS_WORDS_RU,
@@ -246,12 +249,12 @@ def _create_normalizer(step: str, config: GeneralConfig) -> BaseNormalizer:
         from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNormalizer
 
         return InitialsRuNormalizer(config)
-    if step == NORMALIZER_PRONUNCIATION_EXCEPTIONS_RU:
-        from audiobook_generator.normalizers.pronunciation_exceptions_ru_normalizer import (
-            PronunciationExceptionsRuNormalizer,
+    if step == NORMALIZER_TTS_PRONUNCIATION_OVERRIDES:
+        from audiobook_generator.normalizers.tts_pronunciation_overrides_normalizer import (
+            TTSPronunciationOverridesNormalizer,
         )
 
-        return PronunciationExceptionsRuNormalizer(config)
+        return TTSPronunciationOverridesNormalizer(config)
     if step == NORMALIZER_STRESS_WORDS_RU:
         from audiobook_generator.normalizers.stress_words_ru_normalizer import StressWordsRuNormalizer
 

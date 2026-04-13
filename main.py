@@ -268,8 +268,8 @@ def handle_args():
         "--normalize_steps",
         help=(
             "Comma-separated normalizer steps to apply in order. Example: "
-            "simple_symbols,initials_ru,pronunciation_exceptions_ru,numbers_ru,stress_words_ru,"
-            "stress_ambiguity_llm,llm,simple_symbols,initials_ru,pronunciation_exceptions_ru,"
+            "simple_symbols,initials_ru,tts_pronunciation_overrides,numbers_ru,"
+            "stress_ambiguity_llm,llm,simple_symbols,initials_ru,tts_pronunciation_overrides,"
             "proper_nouns_pronunciation_ru,tts_safe_split"
         ),
     )
@@ -319,7 +319,14 @@ def handle_args():
         "--normalize_pronunciation_exceptions_file",
         help=(
             "Optional UTF-8 file with per-line pronunciation overrides in the form "
-            "'source==replacement'. Use this with pronunciation_exceptions_ru."
+            "'source==replacement'. Legacy alias for --normalize_tts_pronunciation_overrides_file."
+        ),
+    )
+    normalizer_group.add_argument(
+        "--normalize_tts_pronunciation_overrides_file",
+        help=(
+            "Optional UTF-8 file with per-line XTTS pronunciation overrides in the form "
+            "'source==replacement'. Use this with tts_pronunciation_overrides."
         ),
     )
     normalizer_group.add_argument(

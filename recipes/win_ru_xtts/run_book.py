@@ -10,9 +10,9 @@ from pathlib import Path
 
 
 DEFAULT_NORMALIZE_STEPS = (
-    "simple_symbols,initials_ru,pronunciation_exceptions_ru,"
-    "numbers_ru,stress_words_ru,stress_ambiguity_llm,llm,simple_symbols,"
-    "initials_ru,pronunciation_exceptions_ru,stress_words_ru,proper_nouns_pronunciation_ru,tts_safe_split"
+    "simple_symbols,initials_ru,tts_pronunciation_overrides,"
+    "numbers_ru,stress_ambiguity_llm,llm,simple_symbols,"
+    "initials_ru,tts_pronunciation_overrides,proper_nouns_pronunciation_ru,tts_safe_split"
 )
 DEFAULT_NORMALIZE_MODEL = "gpt-5.4"
 DEFAULT_VOICE_NAME = "reference_long"
