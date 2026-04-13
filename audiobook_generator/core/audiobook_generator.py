@@ -9,6 +9,7 @@ from audiobook_generator.config.general_config import GeneralConfig
 from audiobook_generator.core.audio_tags import AudioTags
 from audiobook_generator.core.m4b_packager import package_m4b
 from audiobook_generator.normalizers.base_normalizer import get_normalizer
+from audiobook_generator.normalizers.pipeline_runner import NormalizationPipelineRunner
 from audiobook_generator.tts_providers.base_tts_provider import get_tts_provider
 from audiobook_generator.utils.log_handler import setup_logging
 from audiobook_generator.utils.filename_sanitizer import make_safe_filename
@@ -151,13 +152,11 @@ class AudiobookGenerator:
         logger.info("Saved chapter %s text artifacts to %s", idx, artifact_dir)
         return artifact_dir
 
-    def _normalize_with_trace(self, normalizer, text, title):
+    def _normalize_with_trace(self, normalizer, text, title, artifact_dir):
         if not normalizer:
             return text, []
-        if hasattr(normalizer, "normalize_with_trace"):
-            return normalizer.normalize_with_trace(text, chapter_title=title)
-        normalized = normalizer.normalize(text, chapter_title=title)
-        return normalized, [(getattr(normalizer, "get_step_name", lambda: normalizer.__class__.__name__.lower())(), normalized)]
+        runner = NormalizationPipelineRunner(config=self.config, artifact_dir=artifact_dir)
+        return runner.run(normalizer, text, title)
 
     def _load_prepared_text(self, idx, title):
         if not self.config.prepared_text_folder:
@@ -207,7 +206,13 @@ class AudiobookGenerator:
             audio_tags = AudioTags(
                 title, book_parser.get_book_author(), book_parser.get_book_title(), idx
             )
-            text_for_tts, tts_trace = self._normalize_with_trace(normalizer, source_text, title)
+            artifact_dir = self._chapter_artifact_dir(idx, title)
+            text_for_tts, tts_trace = self._normalize_with_trace(
+                normalizer,
+                source_text,
+                title,
+                artifact_dir,
+            )
             final_label = "tts_input"
             if self.config.prepare_text:
                 final_label = "prepared_text"

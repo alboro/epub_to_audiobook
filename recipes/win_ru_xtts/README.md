@@ -34,4 +34,7 @@ Typical two-step review flow:
 
 By default, `--prepared-text-folder` skips the normalizer chain on those reviewed files. Add `--normalize-reviewed-text` only if you explicitly want one more normalization pass.
 
+When you reuse the same `--output-dir`, normalization progress is tracked in `_state/normalization_progress.sqlite3`.
+Chunked model-backed steps such as `llm` can resume from already completed chunks, and their prompts are saved under `_chapter_artifacts/<chapter>/_normalizer_steps/`.
+
 This recipe is intentionally more general than a personal local wrapper. A personal wrapper can call it with machine-specific defaults.

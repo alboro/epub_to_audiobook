@@ -15,6 +15,8 @@ NORMALIZER_PROPER_NOUNS_RU = "proper_nouns_ru"
 
 
 class BaseNormalizer:
+    STEP_VERSION = 1
+
     def __init__(self, config: GeneralConfig):
         self.config = config
         self.validate_config()
@@ -27,6 +29,53 @@ class BaseNormalizer:
 
     def get_step_name(self) -> str:
         return getattr(self, "STEP_NAME", self.__class__.__name__.lower())
+
+    def get_resume_signature(self) -> dict:
+        return {
+            "step_name": self.get_step_name(),
+            "step_version": getattr(self, "STEP_VERSION", 1),
+        }
+
+    def supports_chunked_resume(self) -> bool:
+        return False
+
+    def plan_processing_units(self, text: str, chapter_title: str = "") -> list[str]:
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support chunked processing units"
+        )
+
+    def process_unit(
+        self,
+        unit: str,
+        *,
+        chapter_title: str = "",
+        unit_index: int,
+        unit_count: int,
+    ) -> str:
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support chunked processing units"
+        )
+
+    def merge_processed_units(
+        self,
+        processed_units: list[str],
+        *,
+        chapter_title: str = "",
+    ) -> str:
+        return "\n\n".join(chunk for chunk in processed_units if chunk).strip()
+
+    def get_step_artifacts(self, text: str, chapter_title: str = "") -> dict[str, str]:
+        return {}
+
+    def get_unit_artifacts(
+        self,
+        unit: str,
+        *,
+        chapter_title: str = "",
+        unit_index: int,
+        unit_count: int,
+    ) -> dict[str, str]:
+        return {}
 
     def get_normalizer_llm(self):
         cached_runtime = getattr(self.config, "_normalizer_llm_runtime", None)
@@ -86,6 +135,9 @@ class ChainNormalizer(BaseNormalizer):
         for step_name, normalizer in zip(self.steps, self.normalizers):
             normalized = normalizer.normalize(normalized, chapter_title=chapter_title)
         return normalized
+
+    def iter_steps(self):
+        return list(zip(self.steps, self.normalizers))
 
     def normalize_with_trace(self, text: str, chapter_title: str = "") -> tuple[str, list[tuple[str, str]]]:
         normalized = text

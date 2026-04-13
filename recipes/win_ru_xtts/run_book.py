@@ -72,8 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--normalize-max-chars",
         type=int,
-        default=4000,
-        help="Max chars per LLM normalization request. Default: 4000.",
+        default=6000,
+        help="Max chars per LLM normalization request. Default: 6000.",
     )
     parser.add_argument(
         "--normalize-tts-safe-max-chars",

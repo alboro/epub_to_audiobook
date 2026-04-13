@@ -68,7 +68,20 @@ When you pass an explicit output directory, this fork keeps the whole run togeth
 - copied source book in `_source/`
 - run logs in `logs/`
 - per-chapter text artifacts in `_chapter_artifacts/`
+- normalization resume state in `_state/normalization_progress.sqlite3`
 - preview text files and generated audio files in the output directory itself
+
+For every normalized chapter, the detailed step-by-step artifacts now also include:
+
+- `_chapter_artifacts/<chapter>/_normalizer_steps/<step>/input.txt`
+- `_chapter_artifacts/<chapter>/_normalizer_steps/<step>/output.txt`
+- prompt/config files for model-backed steps, such as `00_system_prompt.txt`, `01_user_prompt_template.txt`, and per-chunk `01_user_prompt.txt`
+
+This means you can always inspect exactly what was sent to a model for a given chapter and step.
+
+Normalization is now resumable at the step level, and chunked steps such as `llm` are resumable at the chunk level.
+
+If a long LLM normalization run stops halfway through, rerunning the same command with the same output directory will reuse completed steps and completed chunks instead of starting the whole chapter from scratch.
 
 Normalizer prompts can be customized per run from text files:
 

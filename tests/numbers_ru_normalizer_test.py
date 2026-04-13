@@ -1,10 +1,14 @@
 import unittest
 from unittest.mock import MagicMock
+from pathlib import Path
+import tempfile
 
 from audiobook_generator.config.general_config import GeneralConfig
 from audiobook_generator.normalizers.base_normalizer import BaseNormalizer
 from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNormalizer
 from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
+from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
+from audiobook_generator.normalizers.pipeline_runner import NormalizationPipelineRunner
 from audiobook_generator.normalizers.proper_nouns_ru_normalizer import ProperNounsRuNormalizer
 from audiobook_generator.normalizers.pronunciation_exceptions_ru_normalizer import (
     PronunciationExceptionsRuNormalizer,
@@ -101,6 +105,50 @@ class DummyNormalizer(BaseNormalizer):
         return text
 
 
+class DummyChunkedNormalizer(BaseNormalizer):
+    STEP_NAME = "dummy_chunked"
+
+    def __init__(self, config: GeneralConfig):
+        self.process_calls = []
+        super().__init__(config)
+
+    def validate_config(self):
+        return None
+
+    def normalize(self, text: str, chapter_title: str = "") -> str:
+        return text
+
+    def supports_chunked_resume(self) -> bool:
+        return True
+
+    def plan_processing_units(self, text: str, chapter_title: str = "") -> list[str]:
+        return [part for part in text.split("|") if part]
+
+    def process_unit(
+        self,
+        unit: str,
+        *,
+        chapter_title: str = "",
+        unit_index: int,
+        unit_count: int,
+    ) -> str:
+        self.process_calls.append((unit_index, unit))
+        return unit.upper()
+
+    def get_step_artifacts(self, text: str, chapter_title: str = "") -> dict[str, str]:
+        return {"00_system_prompt.txt": "dummy system"}
+
+    def get_unit_artifacts(
+        self,
+        unit: str,
+        *,
+        chapter_title: str = "",
+        unit_index: int,
+        unit_count: int,
+    ) -> dict[str, str]:
+        return {"01_user_prompt.txt": f"prompt for {unit}"}
+
+
 class TestNumbersRuNormalizer(unittest.TestCase):
     def test_plain_cardinal(self):
         normalizer = NumbersRuNormalizer(make_config())
@@ -188,6 +236,14 @@ class TestSharedNormalizerLLMSupport(unittest.TestCase):
         self.assertIs(first.get_normalizer_llm(), second.get_normalizer_llm())
         self.assertTrue(first.has_normalizer_llm())
 
+    def test_openai_small_chunk_merge(self):
+        merged = OpenAINormalizer._merge_small_chunks(
+            ["A" * 3900, "B" * 900, "C" * 3800],
+            4000,
+        )
+        self.assertEqual(len(merged), 2)
+        self.assertIn("B" * 900, merged[0])
+
 
 class TestProperNounsRuNormalizer(unittest.TestCase):
     def test_accents_internal_proper_nouns(self):
@@ -209,6 +265,30 @@ class TestProperNounsRuNormalizer(unittest.TestCase):
             normalizer.normalize("Для ясности автор этой книжки не лингвист. Но Фицджеральда он помнит."),
             "Для ясности автор этой книжки не лингвист. Но Фицджеральда́ он помнит.",
         )
+
+
+class TestNormalizationPipelineRunner(unittest.TestCase):
+    def test_resumes_chunked_units_and_saves_prompt_artifacts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = make_config(output_folder=temp_dir, normalize_steps="dummy_chunked")
+            artifact_dir = Path(temp_dir) / "_chapter_artifacts" / "0001_Test"
+            first = DummyChunkedNormalizer(config)
+            runner = NormalizationPipelineRunner(config=config, artifact_dir=artifact_dir)
+            normalized, trace = runner.run(first, "alpha|beta", "Test")
+
+            self.assertEqual(normalized, "ALPHA\n\nBETA")
+            self.assertEqual(first.process_calls, [(1, "alpha"), (2, "beta")])
+            self.assertEqual(trace, [("dummy_chunked", "ALPHA\n\nBETA")])
+            self.assertTrue((artifact_dir / "_normalizer_steps" / "01_dummy_chunked" / "00_system_prompt.txt").is_file())
+            self.assertTrue((artifact_dir / "_normalizer_steps" / "01_dummy_chunked" / "chunks" / "0001" / "01_user_prompt.txt").is_file())
+
+            second = DummyChunkedNormalizer(config)
+            second_runner = NormalizationPipelineRunner(config=config, artifact_dir=artifact_dir)
+            resumed, resumed_trace = second_runner.run(second, "alpha|beta", "Test")
+
+            self.assertEqual(resumed, "ALPHA\n\nBETA")
+            self.assertEqual(resumed_trace, [("dummy_chunked", "ALPHA\n\nBETA")])
+            self.assertEqual(second.process_calls, [])
 
 
 if __name__ == "__main__":
