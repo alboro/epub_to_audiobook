@@ -14,6 +14,7 @@ NORMALIZER_STRESS_AMBIGUITY_LLM = "stress_ambiguity_llm"
 NORMALIZER_TSNORM_RU = "tsnorm_ru"
 NORMALIZER_PROPER_NOUNS_RU = "proper_nouns_ru"
 NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU = "proper_nouns_pronunciation_ru"
+NORMALIZER_ABBREVIATIONS_RU = "abbreviations_ru"
 
 
 class BaseNormalizer:
@@ -110,6 +111,7 @@ def get_supported_normalizers() -> List[str]:
         NORMALIZER_OPENAI,
         NORMALIZER_SIMPLE_SYMBOLS,
         NORMALIZER_INITIALS_RU,
+        NORMALIZER_ABBREVIATIONS_RU,
         NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
         NORMALIZER_STRESS_WORDS_RU,
         NORMALIZER_STRESS_AMBIGUITY_LLM,
@@ -229,6 +231,10 @@ def normalize_step_name(step: str) -> str:
         NORMALIZER_NUMBERS_RU: NORMALIZER_NUMBERS_RU,
         "numbers": NORMALIZER_NUMBERS_RU,
         "ru_numbers": NORMALIZER_NUMBERS_RU,
+        NORMALIZER_ABBREVIATIONS_RU: NORMALIZER_ABBREVIATIONS_RU,
+        "abbreviations": NORMALIZER_ABBREVIATIONS_RU,
+        "abbrev_ru": NORMALIZER_ABBREVIATIONS_RU,
+        "abbreviations_ru": NORMALIZER_ABBREVIATIONS_RU,
     }
     normalized = aliases.get(lowered)
     if not normalized:
@@ -287,5 +293,9 @@ def _create_normalizer(step: str, config: GeneralConfig) -> BaseNormalizer:
         from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
 
         return NumbersRuNormalizer(config)
+    if step == NORMALIZER_ABBREVIATIONS_RU:
+        from audiobook_generator.normalizers.abbreviations_ru_normalizer import AbbreviationsRuNormalizer
+
+        return AbbreviationsRuNormalizer(config)
     raise ValueError(f"Invalid normalizer step: {step}")
 
