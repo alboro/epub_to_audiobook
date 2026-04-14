@@ -6,6 +6,7 @@ __pycache__/
 
 # Virtual environment
 venv/
+.venv/
 .idea
 .history/
 .run/
@@ -31,7 +32,6 @@ audiobook_output/
 private_examples/
 
 # custom
-scripts/
 *.onnx
 *.onnx.json
 
@@ -47,7 +47,6 @@ test.py
 logs/
 .local/
 .cache/
-.venv/
 .venv_py311_broken_*/
 out/
 input/

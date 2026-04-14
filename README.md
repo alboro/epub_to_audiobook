@@ -16,6 +16,17 @@ The goal of this fork is still simple:
 
 Default behavior is intended to remain close to the original project unless the new options are explicitly enabled.
 
+## Quick Start
+
+macOS:
+
+```bash
+bash scripts/setup_macos.sh
+bash scripts/run_preview_macos.sh
+```
+
+More detailed notes and an OpenAI-compatible example live in [docs/macos.md](docs/macos.md).
+
 Recommended workflow for preprocessing and review:
 
 1. `prepare_text`:
