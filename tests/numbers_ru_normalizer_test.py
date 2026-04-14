@@ -10,6 +10,7 @@ from audiobook_generator.normalizers.abbreviations_ru_normalizer import (
     AbbreviationsRuNormalizer,
     _expand_acronym,
 )
+from audiobook_generator.normalizers.tsnorm_ru_normalizer import TSNormRuNormalizer
 from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNormalizer
 from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
 from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
@@ -986,6 +987,74 @@ class TestNormalizationPipelineRunner(unittest.TestCase):
             self.assertEqual(resumed, "ALPHA\n\nBETA")
             self.assertEqual(resumed_trace, [("dummy_chunked", "ALPHA\n\nBETA")])
             self.assertEqual(second.process_calls, [])
+
+
+class TestTSNormRuNormalizerStressRuExploration(unittest.TestCase):
+    """Exploration tests for TODO 4: stress_ru step using tsnorm.
+
+    Confirms that ``tsnorm_ru`` (aliased as ``stress_ru``) already handles:
+    - Stress placement for unambiguous single-stress words.
+    - Ё restoration (е→ё) when ``stress_yo=True``.
+    - Leaves genuinely ambiguous homographs ("замок") untouched.
+    - Works through the pipeline registration under the "stress_ru" alias.
+    """
+
+    def setUp(self):
+        self.n = TSNormRuNormalizer(
+            make_config(
+                normalize_steps="tsnorm_ru",
+                normalize_tsnorm_stress_yo=True,
+                normalize_tsnorm_stress_monosyllabic=False,
+                normalize_tsnorm_min_word_length=2,
+            )
+        )
+
+    def test_places_stress_on_unambiguous_word(self):
+        result = self.n.normalize("любовь")
+        self.assertIn(COMBINING_ACUTE, result)
+        # "любо́вь" — combining acute after "о"
+        self.assertTrue(result.startswith("любо"))
+
+    def test_places_stress_on_verb_form(self):
+        # "бере́т" — third-person singular of брать
+        result = self.n.normalize("берет")
+        self.assertIn(COMBINING_ACUTE, result)
+
+    def test_leaves_homograph_without_stress(self):
+        # "замок" is ambiguous (за́мок=castle, замо́к=padlock)
+        result = self.n.normalize("замок")
+        self.assertNotIn(COMBINING_ACUTE, result)
+
+    def test_yo_restoration_in_sentence(self):
+        # "е" → "ё" when stress_yo=True
+        result = self.n.normalize("е написано без точки")
+        self.assertIn("ё", result)
+
+    def test_stress_in_sentence(self):
+        result = self.n.normalize("Одно из чудес")
+        # "чуде́с" should be stressed (тsnorm + stress_overrides)
+        self.assertIn(COMBINING_ACUTE, result)
+
+    def test_skips_non_russian_language(self):
+        n_en = TSNormRuNormalizer(
+            make_config(
+                normalize_steps="tsnorm_ru",
+                language="en-US",
+                normalize_tsnorm_stress_yo=True,
+                normalize_tsnorm_stress_monosyllabic=False,
+                normalize_tsnorm_min_word_length=2,
+            )
+        )
+        text = "love is great"
+        self.assertEqual(n_en.normalize(text), text)
+
+    def test_registered_as_stress_ru_alias(self):
+        from audiobook_generator.normalizers.base_normalizer import normalize_step_name, NORMALIZER_TSNORM_RU
+        self.assertEqual(normalize_step_name("stress_ru"), NORMALIZER_TSNORM_RU)
+        self.assertEqual(normalize_step_name("tsnorm_ru"), NORMALIZER_TSNORM_RU)
+
+    def test_step_name(self):
+        self.assertEqual(self.n.get_step_name(), "tsnorm_ru")
 
 
 class TestAbbreviationsRuNormalizer(unittest.TestCase):
