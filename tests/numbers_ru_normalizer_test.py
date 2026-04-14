@@ -122,6 +122,21 @@ def make_config(**overrides):
     return GeneralConfig(MagicMock(**values))
 
 
+def build_test_lexicon(
+    db_path: Path,
+    *,
+    word_forms: dict,
+    lemmas: dict,
+) -> PronunciationLexiconDB:
+    database = PronunciationLexiconDB(db_path)
+    build_tsnorm_pronunciation_lexicon(
+        database,
+        word_forms=word_forms,
+        lemmas=lemmas,
+    )
+    return database
+
+
 class DummyNormalizer(BaseNormalizer):
     def validate_config(self):
         return None
@@ -561,70 +576,140 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
 
 class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
     def test_selects_contextual_variants_for_same_surface_form(self):
-        normalizer = StressAmbiguityLLMNormalizer(
-            make_config(
-                normalize_steps="stress_ambiguity_llm",
-                normalize_base_url="http://127.0.0.1:1234/v1",
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            build_test_lexicon(
+                db_path,
+                word_forms={
+                    "беды": [
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [1],
+                            "form_tags": "genitive singular",
+                            "lemma": "беда",
+                        },
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [3],
+                            "form_tags": "nominative plural",
+                            "lemma": "беда",
+                        },
+                    ]
+                },
+                lemmas={"беда": {"pos": ["NOUN"], "rank": 1}},
             )
-        )
+            normalizer = StressAmbiguityLLMNormalizer(
+                make_config(
+                    normalize_steps="stress_ambiguity_llm",
+                    normalize_base_url="http://127.0.0.1:1234/v1",
+                    normalize_pronunciation_lexicon_db=str(db_path),
+                )
+            )
 
-        def fake_choose_batch(items, **kwargs):
-            selections = {}
-            for item in items:
-                if item.item_id.endswith("0001"):
-                    selections[item.item_id] = "variant_2"
-                elif item.item_id.endswith("0002"):
-                    selections[item.item_id] = "variant_1"
-                else:
-                    selections[item.item_id] = "original"
-            return selections
+            def fake_choose_batch(items, **kwargs):
+                selections = {}
+                for item in items:
+                    if item.item_id.endswith("0001"):
+                        selections[item.item_id] = "variant_2"
+                    elif item.item_id.endswith("0002"):
+                        selections[item.item_id] = "variant_1"
+                    else:
+                        selections[item.item_id] = "original"
+                return selections
 
-        normalizer.choice_service.choose_batch = fake_choose_batch
-        result = normalizer.normalize("После беды пришли новые беды.")
-        self.assertEqual(
-            result,
-            f"После беды{COMBINING_ACUTE} пришли новые бе{COMBINING_ACUTE}ды.",
-        )
+            normalizer.choice_service.choose_batch = fake_choose_batch
+            result = normalizer.normalize("После беды пришли новые беды.")
+            self.assertEqual(
+                result,
+                f"После беды{COMBINING_ACUTE} пришли новые бе{COMBINING_ACUTE}ды.",
+            )
 
     def test_skips_already_accented_word(self):
-        normalizer = StressAmbiguityLLMNormalizer(
-            make_config(
-                normalize_steps="stress_ambiguity_llm",
-                normalize_base_url="http://127.0.0.1:1234/v1",
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            build_test_lexicon(
+                db_path,
+                word_forms={
+                    "беды": [
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [1],
+                            "form_tags": "genitive singular",
+                            "lemma": "беда",
+                        },
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [3],
+                            "form_tags": "nominative plural",
+                            "lemma": "беда",
+                        },
+                    ]
+                },
+                lemmas={"беда": {"pos": ["NOUN"], "rank": 1}},
             )
-        )
-        units = normalizer.plan_processing_units(
-            f"После беды{COMBINING_ACUTE} пришли новые бе{COMBINING_ACUTE}ды.",
-            chapter_title="Test",
-        )
-        self.assertEqual(units, [])
+            normalizer = StressAmbiguityLLMNormalizer(
+                make_config(
+                    normalize_steps="stress_ambiguity_llm",
+                    normalize_base_url="http://127.0.0.1:1234/v1",
+                    normalize_pronunciation_lexicon_db=str(db_path),
+                )
+            )
+            units = normalizer.plan_processing_units(
+                f"После беды{COMBINING_ACUTE} пришли новые бе{COMBINING_ACUTE}ды.",
+                chapter_title="Test",
+            )
+            self.assertEqual(units, [])
 
     def test_post_step_artifacts_include_reports(self):
-        normalizer = StressAmbiguityLLMNormalizer(
-            make_config(
-                normalize_steps="stress_ambiguity_llm",
-                normalize_base_url="http://127.0.0.1:1234/v1",
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            build_test_lexicon(
+                db_path,
+                word_forms={
+                    "беды": [
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [1],
+                            "form_tags": "genitive singular",
+                            "lemma": "беда",
+                        },
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [3],
+                            "form_tags": "nominative plural",
+                            "lemma": "беда",
+                        },
+                    ]
+                },
+                lemmas={"беда": {"pos": ["NOUN"], "rank": 1}},
             )
-        )
-        normalizer.choice_service.choose_batch = lambda items, **kwargs: {
-            items[0].item_id: MagicMock(
-                option_id="variant_2",
-                custom_text=None,
-                cacheable=False,
-                reason="Context says genitive singular",
-                source="llm",
-                has_custom_text=False,
-                resolved_option_id=lambda: "variant_2",
+            normalizer = StressAmbiguityLLMNormalizer(
+                make_config(
+                    normalize_steps="stress_ambiguity_llm",
+                    normalize_base_url="http://127.0.0.1:1234/v1",
+                    normalize_pronunciation_lexicon_db=str(db_path),
+                )
             )
-        }
-        result = normalizer.normalize("После беды.")
-        artifacts = normalizer.get_post_step_artifacts(
-            input_text="После беды.",
-            output_text=result,
-            chapter_title="Test",
-        )
-        self.assertIn("changed_candidates", artifacts["93_selection_stats.json"])
-        self.assertIn("После беды", artifacts["92_selection_report.txt"])
+            normalizer.choice_service.choose_batch = lambda items, **kwargs: {
+                items[0].item_id: MagicMock(
+                    option_id="variant_2",
+                    custom_text=None,
+                    cacheable=False,
+                    reason="Context says genitive singular",
+                    source="llm",
+                    has_custom_text=False,
+                    resolved_option_id=lambda: "variant_2",
+                )
+            }
+            result = normalizer.normalize("После беды.")
+            artifacts = normalizer.get_post_step_artifacts(
+                input_text="После беды.",
+                output_text=result,
+                chapter_title="Test",
+            )
+            self.assertIn("changed_candidates", artifacts["93_selection_stats.json"])
+            self.assertIn("После беды", artifacts["92_selection_report.txt"])
+            self.assertIn("lexicon_entries:", artifacts["92_selection_report.txt"])
 
 
 class TestNormalizationPipelineRunner(unittest.TestCase):

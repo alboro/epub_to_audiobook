@@ -70,6 +70,22 @@ class PronunciationLexiconDB:
             return ()
         return spoken_forms
 
+    def lookup_ambiguous_entries(
+        self,
+        surface_form: str,
+        *,
+        source: str | None = None,
+    ) -> tuple[PronunciationLexiconEntry, ...]:
+        entries = tuple(self.lookup(surface_form, source=source))
+        spoken_forms = {
+            entry.spoken_form
+            for entry in entries
+            if entry.spoken_form
+        }
+        if len(spoken_forms) < 2:
+            return ()
+        return entries
+
     def replace_source_entries(
         self,
         *,
@@ -183,6 +199,13 @@ class PronunciationLexiconDB:
             "proper_name_entries": proper_name_entries,
         }
 
+    def count_source_entries(self, source: str) -> int:
+        with closing(self._connect()) as connection:
+            return connection.execute(
+                "SELECT COUNT(*) FROM entries WHERE source = ?",
+                (source,),
+            ).fetchone()[0]
+
     def _initialize(self):
         with closing(self._connect()) as connection:
             connection.executescript(
@@ -256,7 +279,8 @@ def ensure_pronunciation_lexicon_db(
     database = PronunciationLexiconDB(path or get_default_pronunciation_lexicon_db_path())
     built_sources = json.loads(database.get_metadata("built_sources") or "[]")
     if TSNORM_SOURCE not in built_sources:
-        build_tsnorm_pronunciation_lexicon(database)
+        if database.count_source_entries(TSNORM_SOURCE) == 0:
+            build_tsnorm_pronunciation_lexicon(database)
         built_sources = sorted(set(built_sources + [TSNORM_SOURCE]))
         database.set_metadata("built_sources", json.dumps(built_sources, ensure_ascii=False))
     return database

@@ -98,13 +98,27 @@ def make_config(**overrides):
     return GeneralConfig(MagicMock(**values))
 
 
+def build_test_lexicon(
+    db_path: Path,
+    *,
+    word_forms: dict,
+    lemmas: dict,
+) -> PronunciationLexiconDB:
+    database = PronunciationLexiconDB(db_path)
+    build_tsnorm_pronunciation_lexicon(
+        database,
+        word_forms=word_forms,
+        lemmas=lemmas,
+    )
+    return database
+
+
 class TestPronunciationLexiconDB(unittest.TestCase):
     def test_builds_entries_from_tsnorm_data(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "lexicon.sqlite3"
-            database = PronunciationLexiconDB(db_path)
-            count = build_tsnorm_pronunciation_lexicon(
-                database,
+            database = build_test_lexicon(
+                db_path,
                 word_forms={
                     "собака": [
                         {
@@ -143,7 +157,6 @@ class TestPronunciationLexiconDB(unittest.TestCase):
                     "беда": {"pos": ["NOUN"], "rank": 1},
                 },
             )
-            self.assertEqual(count, 4)
 
             sobaka = database.lookup("собака")[0]
             self.assertEqual(sobaka.spoken_form, f"соба{COMBINING_ACUTE}ка")
@@ -160,14 +173,81 @@ class TestPronunciationLexiconDB(unittest.TestCase):
                 (f"бе{COMBINING_ACUTE}ды", f"беды{COMBINING_ACUTE}"),
             )
 
-
-class TestStressAmbiguityLLMWithLexiconDB(unittest.TestCase):
-    def test_uses_lexicon_db_variants_when_mapping_file_is_empty(self):
+    def test_lookup_ambiguous_entries_requires_multiple_spoken_forms(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "lexicon.sqlite3"
-            database = PronunciationLexiconDB(db_path)
-            build_tsnorm_pronunciation_lexicon(
-                database,
+            database = build_test_lexicon(
+                db_path,
+                word_forms={
+                    "слово": [
+                        {
+                            "word_form": "слово",
+                            "stress_pos": [2],
+                            "form_tags": "canonical",
+                            "lemma": "слово",
+                        }
+                    ],
+                    "беды": [
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [1],
+                            "form_tags": "genitive singular",
+                            "lemma": "беда",
+                        },
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [3],
+                            "form_tags": "nominative plural",
+                            "lemma": "беда",
+                        },
+                    ],
+                },
+                lemmas={
+                    "слово": {"pos": ["NOUN"], "rank": 1},
+                    "беда": {"pos": ["NOUN"], "rank": 1},
+                },
+            )
+
+            self.assertEqual(database.lookup_ambiguous_entries("слово"), ())
+            self.assertEqual(len(database.lookup_ambiguous_entries("беды")), 2)
+
+
+class TestStressAmbiguityLLMWithLexiconDB(unittest.TestCase):
+    def test_surface_form_with_single_spoken_form_is_not_candidate(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            build_test_lexicon(
+                db_path,
+                word_forms={
+                    "слова": [
+                        {
+                            "word_form": "слова",
+                            "stress_pos": [4],
+                            "form_tags": "nominative plural",
+                            "lemma": "слово",
+                        }
+                    ]
+                },
+                lemmas={"слово": {"pos": ["NOUN"], "rank": 1}},
+            )
+            normalizer = StressAmbiguityLLMNormalizer(
+                make_config(
+                    normalize_pronunciation_lexicon_db=str(db_path),
+                )
+            )
+
+            units = normalizer.plan_processing_units(
+                "Но необходимо взвесить приведенные слова.",
+                chapter_title="Test",
+            )
+
+            self.assertEqual(units, [])
+
+    def test_surface_form_with_multiple_spoken_forms_becomes_candidate(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            build_test_lexicon(
+                db_path,
                 word_forms={
                     "беды": [
                         {
@@ -189,13 +269,14 @@ class TestStressAmbiguityLLMWithLexiconDB(unittest.TestCase):
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
                     normalize_pronunciation_lexicon_db=str(db_path),
-                    normalize_stress_ambiguity_file=None,
                 )
             )
+
             units = normalizer.plan_processing_units(
                 "После беды пришли новые беды.",
                 chapter_title="Test",
             )
+
             self.assertGreaterEqual(len(units), 1)
             option_texts: list[str] = []
             for unit in units:
@@ -207,43 +288,232 @@ class TestStressAmbiguityLLMWithLexiconDB(unittest.TestCase):
             self.assertIn(f"бе{COMBINING_ACUTE}ды", option_texts)
             self.assertIn(f"беды{COMBINING_ACUTE}", option_texts)
 
-
-class TestStressAmbiguityLexiconCandidateFiltering(unittest.TestCase):
-    def test_db_only_ambiguous_words_are_not_candidates_by_default(self):
+    def test_ignores_legacy_mapping_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "lexicon.sqlite3"
-            database = PronunciationLexiconDB(db_path)
-            build_tsnorm_pronunciation_lexicon(
-                database,
+            build_test_lexicon(
+                db_path,
                 word_forms={
-                    "слова": [
+                    "слово": [
                         {
-                            "word_form": "слова",
+                            "word_form": "слово",
                             "stress_pos": [2],
-                            "form_tags": "genitive singular",
+                            "form_tags": "canonical",
                             "lemma": "слово",
-                        },
-                        {
-                            "word_form": "слова",
-                            "stress_pos": [4],
-                            "form_tags": "nominative plural",
-                            "lemma": "слово",
-                        },
+                        }
                     ]
                 },
                 lemmas={"слово": {"pos": ["NOUN"], "rank": 1}},
             )
+            mapping_path = Path(temp_dir) / "legacy_ambiguities.txt"
+            mapping_path.write_text(
+                "замок==з+амок|зам+ок\n",
+                encoding="utf-8",
+            )
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
                     normalize_pronunciation_lexicon_db=str(db_path),
-                    normalize_stress_ambiguity_file=None,
+                    normalize_stress_ambiguity_file=str(mapping_path),
                 )
             )
+
             units = normalizer.plan_processing_units(
-                "Но необходимо взвесить приведенные слова.",
+                "Старинный замок молчал.",
                 chapter_title="Test",
             )
+
             self.assertEqual(units, [])
+
+    def test_candidates_manifest_contains_only_db_derived_cases_with_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            build_test_lexicon(
+                db_path,
+                word_forms={
+                    "беды": [
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [1],
+                            "form_tags": "genitive singular",
+                            "lemma": "беда",
+                        },
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [3],
+                            "form_tags": "nominative plural",
+                            "lemma": "беда",
+                        },
+                    ],
+                    "замок": [
+                        {
+                            "word_form": "замок",
+                            "stress_pos": [1],
+                            "form_tags": "castle",
+                            "lemma": "замок",
+                        },
+                        {
+                            "word_form": "замок",
+                            "stress_pos": [4],
+                            "form_tags": "lock",
+                            "lemma": "замок",
+                        },
+                    ],
+                    "муки": [
+                        {
+                            "word_form": "муки",
+                            "stress_pos": [1],
+                            "form_tags": "torment",
+                            "lemma": "мука",
+                        },
+                        {
+                            "word_form": "муки",
+                            "stress_pos": [3],
+                            "form_tags": "flour",
+                            "lemma": "мука",
+                        },
+                    ],
+                    "поступи": [
+                        {
+                            "word_form": "поступи",
+                            "stress_pos": [1],
+                            "form_tags": "noun plural",
+                            "lemma": "поступь",
+                        },
+                        {
+                            "word_form": "поступи",
+                            "stress_pos": [6],
+                            "form_tags": "imperative",
+                            "lemma": "поступить",
+                        },
+                    ],
+                },
+                lemmas={
+                    "беда": {"pos": ["NOUN"], "rank": 1},
+                    "замок": {"pos": ["NOUN"], "rank": 1},
+                    "мука": {"pos": ["NOUN"], "rank": 1},
+                    "поступь": {"pos": ["NOUN"], "rank": 1},
+                    "поступить": {"pos": ["VERB"], "rank": 1},
+                },
+            )
+            mapping_path = Path(temp_dir) / "legacy_ambiguities.txt"
+            mapping_path.write_text(
+                "слова==сл+ова|слов+а\n",
+                encoding="utf-8",
+            )
+            normalizer = StressAmbiguityLLMNormalizer(
+                make_config(
+                    normalize_pronunciation_lexicon_db=str(db_path),
+                    normalize_stress_ambiguity_file=str(mapping_path),
+                )
+            )
+
+            artifacts = normalizer.get_step_artifacts(
+                "Беды, замок, муки и поступи.",
+                chapter_title="Test",
+            )
+            manifest = json.loads(artifacts["02_candidates.json"])
+
+            self.assertEqual(
+                [item["source_text"].lower() for item in manifest],
+                ["беды", "замок", "муки", "поступи"],
+            )
+            self.assertTrue(all(item["lexicon_entries"] for item in manifest))
+            self.assertTrue(
+                all(
+                    {"lemma", "pos", "grammemes", "is_proper_name", "source", "spoken_form"}
+                    <= set(item["lexicon_entries"][0].keys())
+                    for item in manifest
+                )
+            )
+            pronunciation_info = json.loads(artifacts["03_pronunciation_lexicon.json"])
+            self.assertTrue(pronunciation_info["legacy_stress_ambiguity_file_ignored"])
+
+    def test_plan_processing_units_batches_multiple_db_ambiguities(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "lexicon.sqlite3"
+            build_test_lexicon(
+                db_path,
+                word_forms={
+                    "беды": [
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [1],
+                            "form_tags": "genitive singular",
+                            "lemma": "беда",
+                        },
+                        {
+                            "word_form": "беды",
+                            "stress_pos": [3],
+                            "form_tags": "nominative plural",
+                            "lemma": "беда",
+                        },
+                    ],
+                    "замок": [
+                        {
+                            "word_form": "замок",
+                            "stress_pos": [1],
+                            "form_tags": "castle",
+                            "lemma": "замок",
+                        },
+                        {
+                            "word_form": "замок",
+                            "stress_pos": [4],
+                            "form_tags": "lock",
+                            "lemma": "замок",
+                        },
+                    ],
+                    "муки": [
+                        {
+                            "word_form": "муки",
+                            "stress_pos": [1],
+                            "form_tags": "torment",
+                            "lemma": "мука",
+                        },
+                        {
+                            "word_form": "муки",
+                            "stress_pos": [3],
+                            "form_tags": "flour",
+                            "lemma": "мука",
+                        },
+                    ],
+                    "поступи": [
+                        {
+                            "word_form": "поступи",
+                            "stress_pos": [1],
+                            "form_tags": "noun plural",
+                            "lemma": "поступь",
+                        },
+                        {
+                            "word_form": "поступи",
+                            "stress_pos": [6],
+                            "form_tags": "imperative",
+                            "lemma": "поступить",
+                        },
+                    ],
+                },
+                lemmas={
+                    "беда": {"pos": ["NOUN"], "rank": 1},
+                    "замок": {"pos": ["NOUN"], "rank": 1},
+                    "мука": {"pos": ["NOUN"], "rank": 1},
+                    "поступь": {"pos": ["NOUN"], "rank": 1},
+                    "поступить": {"pos": ["VERB"], "rank": 1},
+                },
+            )
+            normalizer = StressAmbiguityLLMNormalizer(
+                make_config(
+                    normalize_pronunciation_lexicon_db=str(db_path),
+                    normalize_max_chars=6000,
+                )
+            )
+
+            units = normalizer.plan_processing_units(
+                "Беды и замок. Муки и поступи.",
+                chapter_title="Test",
+            )
+
+            self.assertEqual(len(units), 1)
+            payload = json.loads(units[0])
+            self.assertEqual(len(payload["items"]), 4)
 
 
 if __name__ == "__main__":

@@ -15,16 +15,14 @@ from audiobook_generator.normalizers.llm_support import (
     NormalizerLLMChoiceService,
 )
 from audiobook_generator.normalizers.pronunciation_lexicon_db import (
-    TSNORM_SOURCE,
+    PronunciationLexiconDB,
+    PronunciationLexiconEntry,
     ensure_pronunciation_lexicon_db,
 )
 from audiobook_generator.normalizers.ru_text_utils import (
     COMBINING_ACUTE,
-    CYRILLIC_STRESSED_WORD_PATTERN,
     is_russian_language,
-    load_choice_mapping_file,
     normalize_stress_marks,
-    plus_stress_to_combining_acute,
     preserve_case,
     strip_combining_acute,
 )
@@ -40,22 +38,13 @@ STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT = (
 Additional rules for this task:
 - The target language is Russian text-to-speech.
 - Focus only on ambiguous Russian word stress or pronunciation inside the highlighted source_text.
+- The provided options come from a pronunciation lexicon and represent valid spoken variants for the same written word form.
 - Choose the option that best matches the local sentence context.
 - Prefer adding a stress mark only when it genuinely helps the Russian TTS model avoid the wrong reading.
 - Leave the original option if the context is insufficient or the pronunciation is not clearly determined.
 - Set cacheable to true only if the best choice is stable for the same source_text regardless of wider context.
 - Do not rewrite surrounding context. Only choose among the provided options for the highlighted source_text unless a clearly better custom_text is necessary."""
 )
-
-BUILTIN_STRESS_AMBIGUITY_VARIANTS_RAW = {
-    "атлас": ("+атлас", "атл+ас"),
-    "беды": ("б+еды", "бед+ы"),
-    "духи": ("д+ухи", "дух+и"),
-    "замок": ("з+амок", "зам+ок"),
-    "муки": ("м+уки", "мук+и"),
-    "плачу": ("пл+ачу", "плач+у"),
-    "поступи": ("п+оступи", "поступ+и"),
-}
 
 
 @dataclass(frozen=True)
@@ -66,6 +55,7 @@ class StressAmbiguityCandidate:
     source_text: str
     context: str
     options: tuple[NormalizerLLMChoiceOption, ...]
+    lexicon_entries: tuple[PronunciationLexiconEntry, ...]
 
     def to_choice_item(self) -> NormalizerLLMChoiceItem:
         return NormalizerLLMChoiceItem(
@@ -79,16 +69,15 @@ class StressAmbiguityCandidate:
 
 class StressAmbiguityLLMNormalizer(BaseNormalizer):
     STEP_NAME = "stress_ambiguity_llm"
-    STEP_VERSION = 2
+    STEP_VERSION = 3
 
     def __init__(self, config: GeneralConfig):
-        self.variants = self._load_variants(config)
         self.lexicon_db = (
             ensure_pronunciation_lexicon_db(config.normalize_pronunciation_lexicon_db)
             if is_russian_language(config.language) and config.normalize_pronunciation_lexicon_db
             else None
         )
-        self._lexicon_variant_cache: dict[str, tuple[str, ...]] = {}
+        self._lexicon_entry_cache: dict[str, tuple[PronunciationLexiconEntry, ...]] = {}
         self._planned_text = ""
         self._planned_candidates: dict[str, StressAmbiguityCandidate] = {}
         self._planned_order: list[str] = []
@@ -115,10 +104,12 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
             "base_url": llm.settings.base_url,
             "max_chars": llm.settings.max_chars,
             "choice_system_prompt": STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
-            "variants": sorted((key, list(values)) for key, values in self.variants.items()),
             "pronunciation_lexicon_db": str(self.lexicon_db.path) if self.lexicon_db else None,
             "pronunciation_lexicon_sources": (
-                self.lexicon_db.get_metadata("built_sources") if self.lexicon_db else None
+                self._load_built_sources(self.lexicon_db) if self.lexicon_db else []
+            ),
+            "pronunciation_lexicon_stats": (
+                self.lexicon_db.get_stats() if self.lexicon_db else None
             ),
         }
 
@@ -263,6 +254,10 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
                     {"id": option.option_id, "text": option.text}
                     for option in candidate.options
                 ],
+                "lexicon_entries": [
+                    self._entry_to_payload(entry)
+                    for entry in candidate.lexicon_entries
+                ],
             }
             for candidate in candidates
         ]
@@ -275,10 +270,12 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
             "03_pronunciation_lexicon.json": json.dumps(
                 {
                     "db_path": str(self.lexicon_db.path) if self.lexicon_db else None,
-                    "built_sources": (
-                        json.loads(self.lexicon_db.get_metadata("built_sources") or "[]")
-                        if self.lexicon_db
-                        else []
+                    "built_sources": self._load_built_sources(self.lexicon_db)
+                    if self.lexicon_db
+                    else [],
+                    "stats": self.lexicon_db.get_stats() if self.lexicon_db else {},
+                    "legacy_stress_ambiguity_file_ignored": bool(
+                        getattr(self.config, "normalize_stress_ambiguity_file", None)
                     ),
                 },
                 ensure_ascii=False,
@@ -341,6 +338,20 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
                 case_lines.append(f"  - {option.option_id}: {option.text}")
             if selection.has_custom_text:
                 case_lines.append(f"  - custom: {selection.custom_text}")
+            case_lines.append("lexicon_entries:")
+            for entry in candidate.lexicon_entries:
+                case_lines.append(
+                    "  - spoken_form: {spoken}, lemma: {lemma}, pos: {pos}, grammemes: {grammemes}, "
+                    "is_proper_name: {is_proper_name}, source: {source}, confidence: {confidence}".format(
+                        spoken=entry.spoken_form or "",
+                        lemma=entry.lemma or "",
+                        pos=entry.pos or "",
+                        grammemes=entry.grammemes or "",
+                        is_proper_name=str(entry.is_proper_name).lower(),
+                        source=entry.source,
+                        confidence="" if entry.confidence is None else entry.confidence,
+                    )
+                )
             case_lines.append("")
 
         stats["selection_counts"] = option_counts
@@ -387,24 +398,25 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
         }
 
     def _collect_candidates(self, text: str) -> list[StressAmbiguityCandidate]:
+        if not self.lexicon_db:
+            return []
+
         candidates: list[StressAmbiguityCandidate] = []
         item_index = 1
         for match in AMBIGUOUS_WORD_PATTERN.finditer(text):
             source_text = match.group(0)
             if COMBINING_ACUTE in source_text:
                 continue
+
             key = strip_combining_acute(source_text).lower()
-            if key not in self.variants:
-                # The pronunciation lexicon is our source of candidate options,
-                # not a broad "accent everything ambiguous" discovery list.
-                # We only send curated ambiguity cases to the LLM.
+            lexicon_entries = self._lookup_ambiguous_entries(key)
+            if not lexicon_entries:
                 continue
-            variants = self._resolve_variants(key)
-            if not variants:
-                continue
-            options = self._build_options(source_text, variants)
+
+            options = self._build_options(source_text, lexicon_entries)
             if len(options) < 2:
                 continue
+
             item_id = f"stress_ambiguity_{item_index:04d}"
             item_index += 1
             candidates.append(
@@ -415,51 +427,45 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
                     source_text=source_text,
                     context=self._extract_context(text, match.start(), match.end()),
                     options=options,
+                    lexicon_entries=lexicon_entries,
                 )
             )
         return candidates
 
-    def _resolve_variants(self, key: str) -> tuple[str, ...]:
-        merged: list[str] = []
-        seen = set()
-        for variant in self.variants.get(key, ()):
-            if variant and variant not in seen:
-                merged.append(variant)
-                seen.add(variant)
-
-        for variant in self._lookup_lexicon_variants(key):
-            if variant and variant not in seen:
-                merged.append(variant)
-                seen.add(variant)
-
-        return tuple(merged)
-
-    def _lookup_lexicon_variants(self, key: str) -> tuple[str, ...]:
+    def _lookup_ambiguous_entries(
+        self,
+        key: str,
+    ) -> tuple[PronunciationLexiconEntry, ...]:
         if not self.lexicon_db:
             return ()
-        cached = self._lexicon_variant_cache.get(key)
+
+        cached = self._lexicon_entry_cache.get(key)
         if cached is not None:
             return cached
-        variants = self.lexicon_db.lookup_spoken_forms(
-            key,
-            source=TSNORM_SOURCE,
-            only_ambiguous=True,
-        )
-        self._lexicon_variant_cache[key] = variants
-        return variants
+
+        entries = self.lexicon_db.lookup_ambiguous_entries(key)
+        self._lexicon_entry_cache[key] = entries
+        return entries
 
     def _build_options(
         self,
         source_text: str,
-        variants: tuple[str, ...],
+        lexicon_entries: tuple[PronunciationLexiconEntry, ...],
     ) -> tuple[NormalizerLLMChoiceOption, ...]:
         options: list[NormalizerLLMChoiceOption] = [
             NormalizerLLMChoiceOption("original", source_text)
         ]
         seen_texts = {source_text}
-        for index, variant in enumerate(variants, start=1):
+        unique_spoken_forms = sorted(
+            {
+                entry.spoken_form
+                for entry in lexicon_entries
+                if entry.spoken_form
+            }
+        )
+        for index, spoken_form in enumerate(unique_spoken_forms, start=1):
             preserved = normalize_stress_marks(
-                preserve_case(strip_combining_acute(source_text), variant)
+                preserve_case(strip_combining_acute(source_text), spoken_form)
             )
             if not preserved or preserved in seen_texts:
                 continue
@@ -547,20 +553,20 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
         return NormalizerLLMChoiceSelection(item_id=item_id, option_id=str(selection))
 
     @staticmethod
-    def _load_variants(config: GeneralConfig) -> dict[str, tuple[str, ...]]:
-        variants = {
-            key: tuple(
-                normalize_stress_marks(plus_stress_to_combining_acute(option))
-                for option in options
-            )
-            for key, options in BUILTIN_STRESS_AMBIGUITY_VARIANTS_RAW.items()
+    def _load_built_sources(lexicon_db: PronunciationLexiconDB | None) -> list[str]:
+        if not lexicon_db:
+            return []
+        return json.loads(lexicon_db.get_metadata("built_sources") or "[]")
+
+    @staticmethod
+    def _entry_to_payload(entry: PronunciationLexiconEntry) -> dict[str, object]:
+        return {
+            "surface_form": entry.surface_form,
+            "spoken_form": entry.spoken_form,
+            "lemma": entry.lemma,
+            "pos": entry.pos,
+            "grammemes": entry.grammemes,
+            "is_proper_name": entry.is_proper_name,
+            "source": entry.source,
+            "confidence": entry.confidence,
         }
-        file_variants = load_choice_mapping_file(
-            getattr(config, "normalize_stress_ambiguity_file", None)
-        )
-        for key, options in file_variants.items():
-            variants[strip_combining_acute(key).lower()] = tuple(
-                normalize_stress_marks(option)
-                for option in options
-            )
-        return variants
