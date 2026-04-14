@@ -12,7 +12,7 @@ from audiobook_generator.utils.log_handler import setup_logging, generate_unique
 
 def handle_args():
     parser = argparse.ArgumentParser(description="Convert text book to audiobook")
-    parser.add_argument("input_file", help="Path to the EPUB file")
+    parser.add_argument("input_file", help="Path to the input book file (EPUB or FB2)")
     parser.add_argument("output_folder", help="Path to the output folder")
     parser.add_argument(
         "--tts",
@@ -58,9 +58,10 @@ def handle_args():
         choices=["documents", "toc_sections"],
         default="documents",
         help=(
-            "Choose how EPUB content is grouped into chapters. "
-            "'documents' keeps one chapter per XHTML document. "
-            "'toc_sections' groups documents by top-level table-of-contents sections when possible."
+            "Choose how book content is grouped into chapters. "
+            "'documents' keeps one chapter per XHTML document (EPUB) or per leaf section (FB2). "
+            "'toc_sections' groups EPUB documents by top-level table-of-contents sections when possible "
+            "(not applicable for FB2, falls back to per-section mode)."
         ),
     )
     parser.add_argument(
