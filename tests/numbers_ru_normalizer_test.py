@@ -296,6 +296,36 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
 
 
 class TestSharedNormalizerLLMSupport(unittest.TestCase):
+    def test_choice_batch_planner_groups_multiple_items(self):
+        llm = DummyNormalizer(
+            make_config(
+                normalize_steps="simple_symbols",
+                normalize_base_url="http://127.0.0.1:1234/v1",
+                normalize_max_chars=6000,
+            )
+        ).get_normalizer_llm()
+        service = NormalizerLLMChoiceService(llm)
+        items = [
+            NormalizerLLMChoiceItem(
+                item_id=f"item-{index}",
+                source_text="беды",
+                context=(
+                    "После беды пришли новые беды, и рассказчик снова возвращается к этому слову "
+                    "в длинном, но вполне обычном книжном предложении."
+                ),
+                note="Choose the stress or pronunciation variant that best fits this sentence.",
+                options=(
+                    NormalizerLLMChoiceOption("original", "беды"),
+                    NormalizerLLMChoiceOption("variant_1", f"бе{COMBINING_ACUTE}ды"),
+                    NormalizerLLMChoiceOption("variant_2", f"беды{COMBINING_ACUTE}"),
+                ),
+            )
+            for index in range(6)
+        ]
+        batches = service.plan_batches(items)
+        self.assertLess(len(batches), len(items))
+        self.assertGreater(len(batches[0]), 1)
+
     def test_default_user_prompt_is_plain_text_only(self):
         normalizer = DummyNormalizer(
             make_config(

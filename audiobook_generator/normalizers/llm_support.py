@@ -219,17 +219,19 @@ class NormalizerLLMChoiceService:
         budget = max(1500, preferred_limit - CHOICE_PROMPT_MARGIN_CHARS)
         batches: list[list[NormalizerLLMChoiceItem]] = []
         current_batch: list[NormalizerLLMChoiceItem] = []
-        current_size = len(system_prompt)
 
         for item in items:
-            item_size = self._estimate_batch_size([item], system_prompt=system_prompt)
-            if current_batch and current_size + item_size > budget:
+            candidate_batch = current_batch + [item]
+            candidate_size = self._estimate_batch_size(
+                candidate_batch,
+                system_prompt=system_prompt,
+            )
+            if current_batch and candidate_size > budget:
                 batches.append(current_batch)
-                current_batch = []
-                current_size = len(system_prompt)
+                current_batch = [item]
+                continue
 
-            current_batch.append(item)
-            current_size += item_size
+            current_batch = candidate_batch
 
         if current_batch:
             batches.append(current_batch)
