@@ -3,6 +3,14 @@ class GeneralConfig:
         # General arguments
         self.input_file = getattr(args, 'input_file', None)
         self.output_folder = getattr(args, 'output_folder', None)
+
+        # Default output_folder: a directory named after the book, next to the input file.
+        # e.g. /path/to/MyBook.epub  →  /path/to/MyBook/
+        if not self.output_folder and self.input_file:
+            from pathlib import Path
+            _input = Path(self.input_file).expanduser().resolve()
+            self.output_folder = str(_input.parent / _input.stem)
+
         # Generation mode: prepare | audio | package | all (None = legacy, use individual flags)
         self.mode = getattr(args, 'mode', None)
         self.preview = getattr(args, 'preview', None)
@@ -125,6 +133,12 @@ class GeneralConfig:
         # TTS provider: Kokoro specific arguments
         self.kokoro_base_url = getattr(args, 'kokoro_base_url', None)
         self.kokoro_volume_multiplier = getattr(args, 'kokoro_volume_multiplier', None)
+
+        # --- Internal runtime fields (set by AudiobookGenerator, not from CLI) ---
+        # Sequential run index string, e.g. "001".  Set before workers start.
+        self.current_run_index: str | None = None
+        # Path to normalization state SQLite file (overrides default _state/ location).
+        self.normalization_state_path: str | None = None
 
     def __str__(self):
         return ",\n".join(f"{key}={value}" for key, value in self.__dict__.items())

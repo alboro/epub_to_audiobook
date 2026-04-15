@@ -61,6 +61,12 @@ class TestHandleArgs(unittest.TestCase):
         config = handle_args()
         self.assertEqual(config.mode, 'all')
 
+    @patch('sys.argv', ['program', '/some/path/MyBook.epub', '--mode', 'prepare'])
+    def test_default_output_folder(self):
+        config = handle_args()
+        self.assertIsNotNone(config.output_folder)
+        self.assertTrue(config.output_folder.endswith('MyBook'))
+
     # Test unsupported TTS provider
     @patch('sys.argv', ['program', 'input_file.epub', 'output_folder', '--mode', 'all', '--tts', 'unsupported_tts'])
     def test_unsupported_tts(self):
@@ -74,7 +80,7 @@ class TestHandleArgs(unittest.TestCase):
             handle_args()
 
     # Test missing required input_file argument
-    @patch('sys.argv', ['program', 'output_folder', '--mode', 'all', '--tts', 'azure'])
+    @patch('sys.argv', ['program', '--mode', 'all', '--tts', 'azure'])
     def test_missing_input_file(self):
         with self.assertRaises(SystemExit):
             handle_args()

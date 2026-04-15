@@ -13,7 +13,25 @@ from audiobook_generator.utils.log_handler import setup_logging, generate_unique
 def handle_args():
     parser = argparse.ArgumentParser(description="Convert text book to audiobook")
     parser.add_argument("input_file", help="Path to the input book file (EPUB or FB2)")
-    parser.add_argument("output_folder", help="Path to the output folder")
+    parser.add_argument(
+        "output_folder",
+        nargs="?",
+        default=None,
+        help=(
+            "Output folder (optional). "
+            "Default: a directory named after the book file, placed next to it. "
+            "e.g. /books/MyBook.epub → /books/MyBook/"
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to an INI config file. Settings from the file are merged with CLI args; "
+            "explicit CLI args always take priority."
+        ),
+    )
     parser.add_argument(
         "--mode",
         choices=["prepare", "audio", "package", "all"],
@@ -524,6 +542,24 @@ def handle_args():
     )
 
     args = parser.parse_args()
+
+    # Merge INI config if --config was provided (CLI args take priority).
+    if args.config:
+        from audiobook_generator.config.ini_config_manager import load_ini, merge_ini_into_args
+        from pathlib import Path as _Path
+        ini_path = _Path(args.config)
+        if ini_path.is_dir():
+            # Guess the INI filename from the book name
+            if args.input_file:
+                ini_path = ini_path / (_Path(args.input_file).stem + ".ini")
+        if ini_path.is_file():
+            ini_values = load_ini(ini_path)
+            merge_ini_into_args(args, ini_values)
+        else:
+            import sys as _sys
+            print(f"ERROR: Config file not found: {ini_path}", file=_sys.stderr)
+            _sys.exit(1)
+
     return GeneralConfig(args)
 
 

@@ -59,6 +59,62 @@ class AudiobookGenerator:
             file_handle.write(text)
         return text_file
 
+    # ------------------------------------------------------------------
+    # Run-index helpers (sequential NNN folders under text/ and wav/)
+    # ------------------------------------------------------------------
+
+    def _run_subdir(self, kind: str) -> "Path":
+        """Return the Path for text/ or wav/ subdir under output_folder."""
+        from pathlib import Path
+        return Path(self.config.output_folder) / kind
+
+    def _next_run_index(self, kind: str) -> str:
+        """Return the next sequential run index string, e.g. '001'."""
+        base = self._run_subdir(kind)
+        base.mkdir(parents=True, exist_ok=True)
+        existing = sorted(
+            p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()
+        )
+        return f"{int(existing[-1]) + 1:03d}" if existing else "001"
+
+    def _latest_run_index(self, kind: str) -> str | None:
+        """Return the highest existing run index string, or None if none exist."""
+        base = self._run_subdir(kind)
+        if not base.exists():
+            return None
+        existing = sorted(
+            p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()
+        )
+        return existing[-1] if existing else None
+
+    def _text_run_dir(self) -> str:
+        """Absolute path of the text run folder for the current run."""
+        from pathlib import Path
+        return str(
+            Path(self.config.output_folder) / "text" / (self.config.current_run_index or "001")
+        )
+
+    def _wav_run_dir(self) -> str:
+        """Absolute path of the wav run folder for the current run."""
+        from pathlib import Path
+        return str(
+            Path(self.config.output_folder) / "wav" / (self.config.current_run_index or "001")
+        )
+
+    def _save_ini_snapshot(self, run_dir: str) -> None:
+        """Write a config snapshot INI into the root output folder and the run folder."""
+        from pathlib import Path
+        from audiobook_generator.config.ini_config_manager import save_ini
+        book_stem = Path(self.config.input_file or "book").stem
+        # Root snapshot (always updated to reflect the latest run)
+        root_ini = Path(self.config.output_folder) / f"{book_stem}.ini"
+        save_ini(root_ini, self.config)
+        # Run-specific snapshot
+        if run_dir:
+            run_ini = Path(run_dir) / f"{book_stem}.ini"
+            save_ini(run_ini, self.config)
+            logger.debug("Run config snapshot: %s", run_ini)
+
     def _copy_input_book(self):
         if not self.config.input_file or not self.config.output_folder:
             return None
@@ -92,7 +148,12 @@ class AudiobookGenerator:
         return str(target_path)
 
     def _chapter_artifact_dir(self, idx, title):
-        artifacts_root = os.path.join(self.config.output_folder, "_chapter_artifacts")
+        # Artifacts live under the text run folder (they describe the normalization
+        # that produced the text for this run).
+        text_run = self._text_run_dir() if self.config.current_run_index else os.path.join(
+            self.config.output_folder, "_chapter_artifacts"
+        )
+        artifacts_root = os.path.join(text_run, "_chapter_artifacts")
         safe_name = make_safe_filename(
             title=title,
             idx=idx,
@@ -264,20 +325,24 @@ class AudiobookGenerator:
             if prepared_text_path:
                 logger.info("Using reviewed text for chapter %s from %s", idx, prepared_text_path)
 
+            # Determine output dirs for this run
+            text_out_dir = self._text_run_dir() if self.config.current_run_index else self.config.output_folder
+            wav_out_dir = self._wav_run_dir() if self.config.current_run_index else self.config.output_folder
+
             # Save chapter text if required
             if self.config.output_text:
-                self._write_chapter_text(self.config.output_folder, idx, title, source_text)
+                self._write_chapter_text(text_out_dir, idx, title, source_text)
 
             # Generate audio file (safe, length-limited, cross-platform)
             audio_ext = "." + tts_provider.get_output_file_extension()
             safe_audio_name = make_safe_filename(
                 title=title,
                 idx=idx,
-                output_dir=self.config.output_folder,
+                output_dir=wav_out_dir,
                 ext=audio_ext,
                 collision_check=False,
             )
-            output_file = os.path.join(self.config.output_folder, safe_audio_name)
+            output_file = os.path.join(wav_out_dir, safe_audio_name)
 
             audio_tags = AudioTags(
                 title, book_parser.get_book_author(), book_parser.get_book_title(), idx
@@ -306,15 +371,16 @@ class AudiobookGenerator:
             )
 
             if self.config.prepare_text:
-                text_file = self._write_chapter_text(self.config.output_folder, idx, title, text_for_tts)
+                text_file = self._write_chapter_text(text_out_dir, idx, title, text_for_tts)
                 logger.info("Prepared chapter %s text for review: %s", idx, text_file)
                 return True
 
             if self.config.preview:
-                text_file = self._write_chapter_text(self.config.output_folder, idx, title, text_for_tts)
+                text_file = self._write_chapter_text(text_out_dir, idx, title, text_for_tts)
                 logger.info("Preview stopped before TTS for chapter %s; final text saved to %s", idx, text_file)
                 return True
 
+            os.makedirs(wav_out_dir, exist_ok=True)
             tts_provider.text_to_speech(text_for_tts, output_file, audio_tags)
 
             logger.info(f"✅ Converted chapter {idx}: {title}, output file: {output_file}")
@@ -351,10 +417,43 @@ class AudiobookGenerator:
                 self.config.package_m4b = True
                 logger.info("Mode: all — normalize + synthesize + package.")
 
+            os.makedirs(self.config.output_folder, exist_ok=True)
+
+            # Determine run index for the structured text/ and wav/ layout.
+            # Only applies when mode is explicitly set (not legacy mode=None).
+            if mode in ('prepare', 'all'):
+                run_index = self._next_run_index("text")
+            elif mode == 'audio':
+                # Use the same index as the latest text run.
+                latest_text = self._latest_run_index("text")
+                run_index = latest_text if latest_text else "001"
+                # Auto-detect prepared_text_folder if not explicitly provided.
+                if not self.config.prepared_text_folder and latest_text:
+                    auto_text_dir = str(self._run_subdir("text") / latest_text)
+                    if os.path.isdir(auto_text_dir):
+                        self.config.prepared_text_folder = auto_text_dir
+                        logger.info("Auto-detected text source for audio mode: %s", auto_text_dir)
+            else:
+                run_index = None  # legacy path, no structured layout
+
+            self.config.current_run_index = run_index
+
+            # Set per-run normalization state path so resume works per run.
+            if run_index:
+                from pathlib import Path
+                state_dir = Path(self.config.output_folder) / "text" / run_index / "_state"
+                self.config.normalization_state_path = str(
+                    state_dir / "normalization_progress.sqlite3"
+                )
+
+            # Save INI config snapshot for this run.
+            if mode and run_index:
+                run_dir = self._text_run_dir() if mode in ('prepare', 'all') else self._wav_run_dir()
+                self._save_ini_snapshot(run_dir)
+
             book_parser = get_book_parser(self.config)
             tts_provider = get_tts_provider(self.config)
 
-            os.makedirs(self.config.output_folder, exist_ok=True)
             self._copy_input_book()
             if self.config.prepared_text_folder and not os.path.isdir(self.config.prepared_text_folder):
                 raise FileNotFoundError(
@@ -421,6 +520,9 @@ class AudiobookGenerator:
                     chapters_to_process, start=self.config.chapter_start
                 )
             ]
+
+            # Build expected audio file paths (used for m4b packaging).
+            wav_dir = self._wav_run_dir() if run_index else self.config.output_folder
             chapter_output_records = []
             chapter_audio_ext = "." + tts_provider.get_output_file_extension()
             for idx, (title, _text) in enumerate(
@@ -431,11 +533,11 @@ class AudiobookGenerator:
                         idx,
                         title,
                         os.path.join(
-                            self.config.output_folder,
+                            wav_dir,
                             make_safe_filename(
                                 title=title,
                                 idx=idx,
-                                output_dir=self.config.output_folder,
+                                output_dir=wav_dir,
                                 ext=chapter_audio_ext,
                                 collision_check=False,
                             ),
@@ -467,9 +569,18 @@ class AudiobookGenerator:
                     logger.warning(f"  - Chapter {idx}: {title}")
                 logger.info(f"Conversion completed with {len(failed_chapters)} failed chapters. Check your output directory: {self.config.output_folder} and log file: {self.config.log_file} for more details.")
             elif self.config.prepare_text:
-                logger.info(f"All chapters prepared for review successfully. Check your output directory: {self.config.output_folder}")
+                text_run_label = f"text/{run_index}" if run_index else ""
+                logger.info(
+                    "All chapters prepared for review successfully. "
+                    "Check: %s",
+                    os.path.join(self.config.output_folder, text_run_label) if text_run_label else self.config.output_folder,
+                )
             else:
-                logger.info(f"All chapters converted successfully. Check your output directory: {self.config.output_folder}")
+                wav_label = f"wav/{run_index}" if run_index else ""
+                logger.info(
+                    "All chapters converted successfully. Check: %s",
+                    os.path.join(self.config.output_folder, wav_label) if wav_label else self.config.output_folder,
+                )
 
             if (
                 self.config.package_m4b

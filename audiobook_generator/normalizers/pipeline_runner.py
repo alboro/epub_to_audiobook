@@ -22,9 +22,11 @@ class NormalizationPipelineRunner:
         self.artifact_dir = Path(artifact_dir)
         self.steps_root = self.artifact_dir / "_normalizer_steps"
         self.steps_root.mkdir(parents=True, exist_ok=True)
-        self.store = NormalizationProgressStore(
-            Path(self.config.output_folder) / "_state" / "normalization_progress.sqlite3"
-        )
+        # Use per-run state path if set by AudiobookGenerator, else fall back to legacy location.
+        _state_path = getattr(config, 'normalization_state_path', None)
+        if not _state_path:
+            _state_path = Path(self.config.output_folder) / "_state" / "normalization_progress.sqlite3"
+        self.store = NormalizationProgressStore(Path(_state_path))
         self.chapter_key = self.artifact_dir.name
         self.step_summaries: list[dict[str, object]] = []
 
