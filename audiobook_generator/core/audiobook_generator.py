@@ -381,6 +381,38 @@ class AudiobookGenerator:
                 return True
 
             os.makedirs(wav_out_dir, exist_ok=True)
+
+            # --- Chunked synthesis (sentence-level resume) ---
+            if self.config.chunked_audio:
+                from audiobook_generator.core.audio_chunk_store import AudioChunkStore
+                from audiobook_generator.core.chunked_audio_generator import ChunkedAudioGenerator
+                from audiobook_generator.utils.filename_sanitizer import make_safe_filename as _msf
+                run_id = self.config.current_run_index or "000"
+                chunk_store_path = os.path.join(self.config.output_folder, "_state", "audio_chunks.sqlite3")
+                chunk_store = AudioChunkStore(chunk_store_path)
+                chunk_store.ensure_run(run_id)
+                chunks_base = os.path.join(wav_out_dir, "chunks")
+                # Chapter key = safe directory name
+                chapter_key = _msf(title=title, idx=idx, output_dir=chunks_base, ext="", collision_check=False).rstrip(".")
+                chunked = ChunkedAudioGenerator(
+                    config=self.config,
+                    chunk_store=chunk_store,
+                    tts_provider=tts_provider,
+                    run_id=run_id,
+                    chunks_base_dir=chunks_base,
+                )
+                success = chunked.process_chapter(
+                    chapter_idx=idx,
+                    chapter_key=chapter_key,
+                    text_for_tts=text_for_tts,
+                    output_file=output_file,
+                    audio_tags=audio_tags,
+                )
+                if success:
+                    logger.info("✅ Converted chapter %d (chunked): %s, output: %s", idx, title, output_file)
+                return success
+
+            # --- Standard synthesis (whole chapter in one TTS call) ---
             tts_provider.text_to_speech(text_for_tts, output_file, audio_tags)
 
             logger.info(f"✅ Converted chapter {idx}: {title}, output file: {output_file}")

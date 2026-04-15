@@ -23,6 +23,7 @@ class GeneralConfig:
         self.worker_count = getattr(args, 'worker_count', None)
         self.use_pydub_merge = getattr(args, 'use_pydub_merge', None)
         self.package_m4b = getattr(args, 'package_m4b', None)
+        self.chunked_audio = getattr(args, 'chunked_audio', None)
         self.m4b_filename = getattr(args, 'm4b_filename', None)
         self.m4b_bitrate = getattr(args, 'm4b_bitrate', None)
         self.ffmpeg_path = getattr(args, 'ffmpeg_path', None)

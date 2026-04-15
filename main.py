@@ -167,6 +167,17 @@ def handle_args():
         help="Package generated chapter audio files into a single m4b audiobook with chapter markers.",
     )
     parser.add_argument(
+        "--chunked_audio",
+        action="store_true",
+        help=(
+            "Enable sentence-level chunked TTS generation with SQLite resume. "
+            "Each sentence is synthesised independently; already-synthesised chunks "
+            "are reused on reruns. Changed sentences are re-synthesised and old chunks "
+            "are marked as superseded (not deleted). "
+            "Chunks are merged into the chapter audio file after synthesis."
+        ),
+    )
+    parser.add_argument(
         "--m4b_filename",
         help="Optional output filename for the packaged m4b file.",
     )

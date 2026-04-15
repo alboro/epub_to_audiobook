@@ -114,6 +114,7 @@ FIELD_SECTIONS: Dict[str, str] = {
     "normalize_tsnorm_min_word_length": "normalize",
     # [m4b] --------------------------------------------------------------------
     "package_m4b": "m4b",
+    "chunked_audio": "m4b",
     "m4b_filename": "m4b",
     "m4b_bitrate": "m4b",
     "ffmpeg_path": "m4b",
