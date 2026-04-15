@@ -9,7 +9,7 @@ from audiobook_generator.normalizers.ru_text_utils import (
     is_russian_language,
     normalize_stress_marks,
 )
-from audiobook_generator.normalizers.stress_words_ru_normalizer import StressWordsRuNormalizer
+from audiobook_generator.normalizers.ru_stress_words_normalizer import StressWordsRuNormalizer
 from audiobook_generator.normalizers.tsnorm_support import create_tsnorm_backend, load_tsnorm_backend
 
 logger = logging.getLogger(__name__)

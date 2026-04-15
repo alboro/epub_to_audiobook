@@ -114,7 +114,7 @@ def handle_args():
     parser.add_argument(
         "--prepare_text",
         action="store_true",
-        help="Prepare per-chapter UTF-8 text files for review and stop before TTS. If --normalize is enabled, the exported text is normalized first. Chapter text artifacts are also saved.",
+        help="[Deprecated: use --mode prepare] Prepare per-chapter UTF-8 text files for review and stop before TTS. If --normalize is enabled, the exported text is normalized first.",
     )
     parser.add_argument(
         "--prepared_text_folder",
@@ -309,8 +309,9 @@ def handle_args():
     normalizer_group.add_argument(
         "--normalize_steps",
         help=(
-            "Comma-separated normalizer steps to apply in order. Example: "
-            "simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,"
+            "Comma-separated normalizer steps to apply in order. "
+            "When set, --normalize_provider is ignored. "
+            "Example: simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,"
             "simple_symbols,initials_ru,proper_nouns_pronunciation_ru,tts_safe_split"
         ),
     )
@@ -318,7 +319,10 @@ def handle_args():
         "--normalize_provider",
         choices=get_supported_normalizers(),
         default="openai",
-        help="Choose normalizer provider (default: openai).",
+        help=(
+            "Single-step normalizer shorthand when --normalize_steps is not set (default: openai). "
+            "Superseded by --normalize_steps when both are given."
+        ),
     )
     normalizer_group.add_argument(
         "--normalize_model",
@@ -359,8 +363,8 @@ def handle_args():
     normalizer_group.add_argument(
         "--normalize_pronunciation_exceptions_file",
         help=(
-            "Optional UTF-8 file with per-line pronunciation overrides in the form "
-            "'source==replacement'. Legacy alias for --normalize_tts_pronunciation_overrides_file."
+            "Deprecated alias for --normalize_tts_pronunciation_overrides_file. "
+            "Use --normalize_tts_pronunciation_overrides_file instead."
         ),
     )
     normalizer_group.add_argument(

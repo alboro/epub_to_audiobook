@@ -10,7 +10,7 @@ from audiobook_generator.normalizers.pronunciation_lexicon_db import (
     build_tsnorm_pronunciation_lexicon,
 )
 from audiobook_generator.normalizers.ru_text_utils import COMBINING_ACUTE
-from audiobook_generator.normalizers.stress_ambiguity_llm_normalizer import (
+from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import (
     StressAmbiguityLLMNormalizer,
 )
 

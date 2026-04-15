@@ -33,7 +33,7 @@ from audiobook_generator.normalizers.pronunciation_lexicon_db import (
     ensure_pronunciation_lexicon_db,
 )
 from audiobook_generator.normalizers.ru_text_utils import COMBINING_ACUTE
-from audiobook_generator.normalizers.stress_ambiguity_llm_normalizer import (
+from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import (
     StressAmbiguityLLMNormalizer,
 )
 

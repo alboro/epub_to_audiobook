@@ -6,23 +6,23 @@ import json
 
 from audiobook_generator.config.general_config import GeneralConfig
 from audiobook_generator.normalizers.base_normalizer import BaseNormalizer
-from audiobook_generator.normalizers.abbreviations_ru_normalizer import (
+from audiobook_generator.normalizers.ru_abbreviations_normalizer import (
     AbbreviationsRuNormalizer,
     _expand_acronym,
 )
-from audiobook_generator.normalizers.tsnorm_ru_normalizer import TSNormRuNormalizer
-from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNormalizer
-from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
+from audiobook_generator.normalizers.ru_tsnorm_normalizer import TSNormRuNormalizer
+from audiobook_generator.normalizers.ru_initials_normalizer import InitialsRuNormalizer
+from audiobook_generator.normalizers.ru_numbers_normalizer import NumbersRuNormalizer
 from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
-from audiobook_generator.normalizers.pipeline_runner import NormalizationPipelineRunner
+from audiobook_generator.core.pipeline_runner import NormalizationPipelineRunner
 from audiobook_generator.normalizers.pronunciation_lexicon_db import (
     PronunciationLexiconDB,
     build_tsnorm_pronunciation_lexicon,
 )
-from audiobook_generator.normalizers.proper_nouns_pronunciation_ru_normalizer import (
+from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import (
     ProperNounsPronunciationRuNormalizer,
 )
-from audiobook_generator.normalizers.proper_nouns_ru_normalizer import ProperNounsRuNormalizer
+from audiobook_generator.normalizers.ru_proper_nouns_normalizer import ProperNounsRuNormalizer
 from audiobook_generator.normalizers.tts_pronunciation_overrides_normalizer import (
     TTSPronunciationOverridesNormalizer,
 )
@@ -32,11 +32,11 @@ from audiobook_generator.normalizers.ru_text_utils import (
     plus_stress_to_combining_acute,
 )
 from audiobook_generator.normalizers.simple_symbols_normalizer import SimpleSymbolsNormalizer
-from audiobook_generator.normalizers.stress_ambiguity_llm_normalizer import (
+from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import (
     StressAmbiguityLLMNormalizer,
 )
 from audiobook_generator.normalizers.tts_safe_split_normalizer import TTSSafeSplitNormalizer
-from audiobook_generator.normalizers.stress_words_ru_normalizer import StressWordsRuNormalizer
+from audiobook_generator.normalizers.ru_stress_words_normalizer import StressWordsRuNormalizer
 from audiobook_generator.normalizers.llm_support import (
     NormalizerLLMChoiceService,
     NormalizerLLMChoiceItem,

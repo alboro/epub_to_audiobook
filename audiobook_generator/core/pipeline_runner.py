@@ -6,12 +6,12 @@ import logging
 from pathlib import Path
 
 from audiobook_generator.normalizers.base_normalizer import ChainNormalizer
-from audiobook_generator.normalizers.change_report import (
+from audiobook_generator.utils.change_report import (
     build_change_blocks,
     build_unified_diff,
     render_change_report,
 )
-from audiobook_generator.normalizers.progress_store import NormalizationProgressStore
+from audiobook_generator.core.progress_store import NormalizationProgressStore
 
 logger = logging.getLogger(__name__)
 

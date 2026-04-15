@@ -252,7 +252,7 @@ def _create_normalizer(step: str, config: GeneralConfig) -> BaseNormalizer:
 
         return SimpleSymbolsNormalizer(config)
     if step == NORMALIZER_INITIALS_RU:
-        from audiobook_generator.normalizers.initials_ru_normalizer import InitialsRuNormalizer
+        from audiobook_generator.normalizers.ru_initials_normalizer import InitialsRuNormalizer
 
         return InitialsRuNormalizer(config)
     if step == NORMALIZER_TTS_PRONUNCIATION_OVERRIDES:
@@ -262,27 +262,27 @@ def _create_normalizer(step: str, config: GeneralConfig) -> BaseNormalizer:
 
         return TTSPronunciationOverridesNormalizer(config)
     if step == NORMALIZER_STRESS_WORDS_RU:
-        from audiobook_generator.normalizers.stress_words_ru_normalizer import StressWordsRuNormalizer
+        from audiobook_generator.normalizers.ru_stress_words_normalizer import StressWordsRuNormalizer
 
         return StressWordsRuNormalizer(config)
     if step == NORMALIZER_STRESS_AMBIGUITY_LLM:
-        from audiobook_generator.normalizers.stress_ambiguity_llm_normalizer import (
+        from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import (
             StressAmbiguityLLMNormalizer,
         )
 
         return StressAmbiguityLLMNormalizer(config)
     if step == NORMALIZER_PROPER_NOUNS_RU:
-        from audiobook_generator.normalizers.proper_nouns_ru_normalizer import ProperNounsRuNormalizer
+        from audiobook_generator.normalizers.ru_proper_nouns_normalizer import ProperNounsRuNormalizer
 
         return ProperNounsRuNormalizer(config)
     if step == NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU:
-        from audiobook_generator.normalizers.proper_nouns_pronunciation_ru_normalizer import (
+        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import (
             ProperNounsPronunciationRuNormalizer,
         )
 
         return ProperNounsPronunciationRuNormalizer(config)
     if step == NORMALIZER_TSNORM_RU:
-        from audiobook_generator.normalizers.tsnorm_ru_normalizer import TSNormRuNormalizer
+        from audiobook_generator.normalizers.ru_tsnorm_normalizer import TSNormRuNormalizer
 
         return TSNormRuNormalizer(config)
     if step == NORMALIZER_TTS_SAFE_SPLIT:
@@ -290,11 +290,11 @@ def _create_normalizer(step: str, config: GeneralConfig) -> BaseNormalizer:
 
         return TTSSafeSplitNormalizer(config)
     if step == NORMALIZER_NUMBERS_RU:
-        from audiobook_generator.normalizers.numbers_ru_normalizer import NumbersRuNormalizer
+        from audiobook_generator.normalizers.ru_numbers_normalizer import NumbersRuNormalizer
 
         return NumbersRuNormalizer(config)
     if step == NORMALIZER_ABBREVIATIONS_RU:
-        from audiobook_generator.normalizers.abbreviations_ru_normalizer import AbbreviationsRuNormalizer
+        from audiobook_generator.normalizers.ru_abbreviations_normalizer import AbbreviationsRuNormalizer
 
         return AbbreviationsRuNormalizer(config)
     raise ValueError(f"Invalid normalizer step: {step}")

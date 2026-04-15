@@ -9,7 +9,7 @@ from audiobook_generator.config.general_config import GeneralConfig
 from audiobook_generator.core.audio_tags import AudioTags
 from audiobook_generator.core.m4b_packager import package_m4b
 from audiobook_generator.normalizers.base_normalizer import get_normalizer
-from audiobook_generator.normalizers.pipeline_runner import NormalizationPipelineRunner
+from audiobook_generator.core.pipeline_runner import NormalizationPipelineRunner
 from audiobook_generator.tts_providers.base_tts_provider import get_tts_provider
 from audiobook_generator.utils.log_handler import setup_logging
 from audiobook_generator.utils.filename_sanitizer import make_safe_filename
@@ -436,6 +436,9 @@ class AudiobookGenerator:
             if mode == 'prepare':
                 self.config.prepare_text = True
                 self.config.package_m4b = False
+                # Auto-enable normalization when steps or provider are configured.
+                if not self.config.normalize and (self.config.normalize_steps or self.config.normalize_provider):
+                    self.config.normalize = True
                 logger.info("Mode: prepare — parsing + normalizing, writing review .txt files.")
             elif mode == 'audio':
                 self.config.prepare_text = False
@@ -447,6 +450,9 @@ class AudiobookGenerator:
             elif mode == 'all':
                 self.config.prepare_text = False
                 self.config.package_m4b = True
+                # Auto-enable normalization when steps or provider are configured.
+                if not self.config.normalize and (self.config.normalize_steps or self.config.normalize_provider):
+                    self.config.normalize = True
                 logger.info("Mode: all — normalize + synthesize + package.")
 
             os.makedirs(self.config.output_folder, exist_ok=True)

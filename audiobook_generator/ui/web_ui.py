@@ -6,6 +6,7 @@ from datetime import datetime
 import gradio as gr
 from gradio_log import Log
 from audiobook_generator.config.general_config import GeneralConfig
+from audiobook_generator.normalizers.base_normalizer import get_supported_normalizers
 from audiobook_generator.tts_providers.azure_tts_provider import get_azure_supported_languages, \
     get_azure_supported_voices, get_azure_supported_output_formats
 from audiobook_generator.tts_providers.edge_tts_provider import get_edge_tts_supported_voices, \
@@ -63,6 +64,7 @@ def get_piper_supported_speakers_gui(language, voice, quality):
 
 
 def process_ui_form(input_file, output_dir, worker_count, log_level, output_text, preview,
+                    mode, normalize_enabled, normalize_steps, normalize_provider,
                     search_and_replace_file, title_mode, new_line_mode, chapter_start, chapter_end, remove_endnotes, remove_reference_numbers,
                     model, voices, speed, openai_output_format, instructions,
                     azure_language, azure_voice, azure_output_format, azure_break_duration,
@@ -81,6 +83,14 @@ def process_ui_form(input_file, output_dir, worker_count, log_level, output_text
     config.log = log_level
     config.worker_count = worker_count
     config.no_prompt = True
+
+    # Pipeline mode
+    config.mode = mode if mode and mode != "legacy" else None
+
+    # Normalization
+    config.normalize = normalize_enabled
+    config.normalize_steps = normalize_steps.strip() if normalize_steps and normalize_steps.strip() else None
+    config.normalize_provider = normalize_provider if normalize_provider else None
 
     config.title_mode = title_mode
     config.newline_mode = new_line_mode
@@ -194,6 +204,44 @@ def host_ui(config):
                                       info="Export a plain text file for each chapter.")
                 preview = gr.Checkbox(label="Enable Preview Mode", value=False,
                                   info="It will not convert the to audio, only prepare chapters and cost. Recommended to toggle on when testing book parsing ***without*** audio generation.")
+
+        gr.Markdown("---")
+        with gr.Row(equal_height=True):
+            mode = gr.Dropdown(
+                ["all", "prepare", "audio", "package", "legacy"],
+                label="Pipeline Mode",
+                value="all",
+                interactive=True,
+                info=(
+                    "all = normalize + synthesize + package; "
+                    "prepare = normalize + write review .txt; "
+                    "audio = synthesize only; "
+                    "package = pack existing audio to .m4b; "
+                    "legacy = use individual flags (preview, prepare_text, package_m4b)."
+                ),
+            )
+            with gr.Column():
+                normalize_enabled = gr.Checkbox(
+                    label="Enable Normalization",
+                    value=False,
+                    info="Normalize chapter text before sending it to TTS. Auto-enabled by 'all'/'prepare' mode when steps are set.",
+                )
+                normalize_provider = gr.Dropdown(
+                    get_supported_normalizers(),
+                    label="Normalize Provider (fallback)",
+                    value="openai",
+                    interactive=True,
+                    info="Single-step shorthand used only when Normalize Steps is empty.",
+                )
+            normalize_steps = gr.Textbox(
+                label="Normalize Steps",
+                value="",
+                interactive=True,
+                info=(
+                    "Comma-separated normalizer steps. Supersedes Provider when set. "
+                    "Example: simple_symbols,numbers_ru,initials_ru,stress_words_ru,tts_safe_split"
+                ),
+            )
 
         gr.Markdown("---")
         with gr.Row(equal_height=True):
@@ -453,6 +501,7 @@ def host_ui(config):
                 fn=process_ui_form,
                 inputs=[
                     input_file, output_dir, worker_count, log_level, output_text, preview,
+                    mode, normalize_enabled, normalize_steps, normalize_provider,
                     search_and_replace_file, title_mode, new_line_mode, chapter_start, chapter_end, remove_endnotes, remove_reference_numbers,
                     model, voices, speed, openai_output_format, instructions,
                     azure_language, azure_voice, azure_output_format, azure_break_duration,

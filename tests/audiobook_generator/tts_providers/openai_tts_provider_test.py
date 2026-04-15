@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import patch
 
-from openai import OpenAIError
-
 from audiobook_generator.tts_providers.base_tts_provider import get_tts_provider
 from audiobook_generator.tts_providers.openai_tts_provider import OpenAITTSProvider
 from tests.test_utils import get_openai_config
@@ -11,9 +9,14 @@ from tests.test_utils import get_openai_config
 class TestOpenAiTtsProvider(unittest.TestCase):
 
     def test_missing_env_var_keys(self):
-        config = get_openai_config()
-        with self.assertRaises(OpenAIError):
-            get_tts_provider(config)
+        """Without OPENAI_API_KEY or openai_base_url, provider initialises with a 'dummy'
+        API key (compatible with self-hosted OpenAI-API-compatible servers)."""
+        with patch.dict('os.environ', {}, clear=True):
+            config = get_openai_config()
+            # Should not raise — provider falls back to 'dummy' key for local servers.
+            tts_provider = get_tts_provider(config)
+            self.assertIsInstance(tts_provider, OpenAITTSProvider)
+            self.assertEqual(tts_provider.api_key, "dummy")
 
     @patch.dict('os.environ', {'OPENAI_API_KEY': 'fake_key'})
     def test_estimate_cost(self):
