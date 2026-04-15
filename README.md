@@ -1,4 +1,4 @@
-# EPUB to Audiobook Converter
+# EPUB/FB2 to Audiobook Converter
 
 This repository is a fork of [p0n1/epub_to_audiobook](https://github.com/p0n1/epub_to_audiobook).
 
@@ -12,7 +12,7 @@ This fork keeps that base and adds work aimed at a more practical self-hosted wo
 
 The goal of this fork is still simple:
 
-`EPUB -> audiobook`
+`EPUB/FB2 -> audiobook`
 
 Default behavior is intended to remain close to the original project unless the new options are explicitly enabled.
 
@@ -30,7 +30,7 @@ More detailed notes and an OpenAI-compatible example live in [docs/macos.md](doc
 Recommended workflow for preprocessing and review:
 
 1. `prepare_text`:
-   Parse the EPUB into chapters, optionally normalize each chapter, and write per-chapter UTF-8 `.txt` files for manual review.
+   Parse the EPUB/FB2 into chapters, optionally normalize each chapter, and write per-chapter UTF-8 `.txt` files for manual review.
 2. Review:
    Open the generated chapter `.txt` files, edit them as needed, and save the reviewed text.
 3. TTS:
