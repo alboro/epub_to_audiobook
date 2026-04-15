@@ -14,6 +14,21 @@ from audiobook_generator.tts_providers.openai_tts_provider import get_openai_sup
     get_openai_supported_voices, get_openai_instructions_example, get_openai_supported_output_formats
 from audiobook_generator.tts_providers.piper_tts_provider import get_piper_supported_languages, \
     get_piper_supported_voices, get_piper_supported_qualities, get_piper_supported_speakers
+from audiobook_generator.tts_providers.qwen_tts_provider import (
+    get_qwen_supported_models,
+    get_qwen_supported_voices,
+    get_qwen_supported_language_types,
+)
+from audiobook_generator.tts_providers.gemini_tts_provider import (
+    get_gemini_supported_models,
+    get_gemini_supported_voices,
+    get_gemini_supported_output_formats,
+)
+from audiobook_generator.tts_providers.kokoro_tts_provider import (
+    get_kokoro_supported_models,
+    get_kokoro_supported_voices,
+    get_kokoro_supported_output_formats,
+)
 from audiobook_generator.utils.log_handler import generate_unique_log_path
 from main import main
 
@@ -53,7 +68,10 @@ def process_ui_form(input_file, output_dir, worker_count, log_level, output_text
                     azure_language, azure_voice, azure_output_format, azure_break_duration,
                     edge_language, edge_voice, edge_output_format, proxy, edge_voice_rate, edge_volume, edge_pitch, edge_break_duration,
                     piper_executable_path, piper_docker_image, piper_language, piper_voice, piper_quality, piper_speaker,
-                    piper_noise_scale, piper_noise_w_scale, piper_length_scale, piper_sentence_silence):
+                    piper_noise_scale, piper_noise_w_scale, piper_length_scale, piper_sentence_silence,
+                    qwen_api_key, qwen_voice, qwen_model, qwen_language_type, qwen_stream, qwen_request_timeout,
+                    gemini_api_key, gemini_model, gemini_voice, gemini_output_format, gemini_temperature, gemini_speaker_map,
+                    kokoro_base_url, kokoro_voice, kokoro_model, kokoro_output_format, kokoro_speed, kokoro_volume_multiplier):
 
     config = GeneralConfig(None)
     config.input_file = input_file.name if hasattr(input_file, 'name') else input_file
@@ -106,6 +124,31 @@ def process_ui_form(input_file, output_dir, worker_count, log_level, output_text
         config.piper_noise_w_scale = piper_noise_w_scale
         config.piper_length_scale = piper_length_scale
         config.piper_sentence_silence = piper_sentence_silence
+    elif selected_tts == "Qwen":
+        config.tts = "qwen"
+        config.model_name = qwen_model
+        config.voice_name = qwen_voice
+        config.output_format = "wav"
+        config.qwen_api_key = qwen_api_key or None
+        config.qwen_language_type = qwen_language_type or None
+        config.qwen_stream = qwen_stream
+        config.qwen_request_timeout = qwen_request_timeout
+    elif selected_tts == "Gemini":
+        config.tts = "gemini"
+        config.model_name = gemini_model
+        config.voice_name = gemini_voice
+        config.output_format = gemini_output_format
+        config.gemini_api_key = gemini_api_key or None
+        config.gemini_temperature = gemini_temperature
+        config.gemini_speaker_map = gemini_speaker_map or None
+    elif selected_tts == "Kokoro":
+        config.tts = "kokoro"
+        config.model_name = kokoro_model
+        config.voice_name = kokoro_voice
+        config.output_format = kokoro_output_format
+        config.speed = kokoro_speed
+        config.kokoro_base_url = kokoro_base_url
+        config.kokoro_volume_multiplier = kokoro_volume_multiplier
     else:
         raise ValueError("Unsupported TTS provider selected")
 
@@ -135,7 +178,7 @@ def host_ui(config):
     with gr.Blocks(analytics_enabled=False, title="Epub to Audiobook Converter") as ui:
         with gr.Row(equal_height=True):
             with gr.Column():
-                input_file = gr.File(label="Select the book file to process", file_types=[".epub"], 
+                input_file = gr.File(label="Select the book file to process", file_types=[".epub", ".fb2"],
                                     file_count="single", interactive=True)
 
             with gr.Column():
@@ -288,6 +331,118 @@ def host_ui(config):
                         with gr.Row(equal_height=True):
                             piper_length_scale = gr.Slider(minimum=0.0, maximum=5.0, step=0.1, label="Audio Length Scale", value=1.0)
                             piper_sentence_silence = gr.Slider(minimum=0.0, maximum=2.0, step=0.1, label="Sentence Silence", value=0.2)
+
+            with gr.Tab("Qwen", id="qwen_tab_id") as qwen_tab:
+                qwen_tab.select(on_tab_change, inputs=None, outputs=None)
+                gr.Markdown(
+                    "Requires `dashscope` package (`pip install dashscope`). "
+                    "Set `DASHSCOPE_API_KEY` env variable or fill the field below. "
+                    "Language is auto-detected from the **Language type** setting."
+                )
+                with gr.Row(equal_height=True):
+                    qwen_model = gr.Dropdown(
+                        get_qwen_supported_models(), label="Model", value="qwen3-tts-flash",
+                        interactive=True, allow_custom_value=True,
+                        info="Qwen3 TTS model to use"
+                    )
+                    qwen_voice = gr.Dropdown(
+                        get_qwen_supported_voices(), label="Voice", value="Cherry",
+                        interactive=True, allow_custom_value=True,
+                        info="Voice for synthesis"
+                    )
+                    qwen_language_type = gr.Dropdown(
+                        get_qwen_supported_language_types(), label="Language Type", value="Russian",
+                        interactive=True,
+                        info="Language hint for Qwen3 TTS (Russian, Chinese, English, …)"
+                    )
+                with gr.Row(equal_height=True):
+                    qwen_api_key = gr.Textbox(
+                        label="DashScope API Key", value="", type="password",
+                        interactive=True,
+                        info="Leave empty to use DASHSCOPE_API_KEY environment variable"
+                    )
+                    qwen_stream = gr.Checkbox(label="Streaming mode", value=False,
+                                              info="Enable streaming synthesis (experimental)")
+                    qwen_request_timeout = gr.Slider(
+                        minimum=10, maximum=120, step=5, label="Request Timeout (s)", value=30,
+                        info="Seconds to wait for each API call"
+                    )
+
+            with gr.Tab("Gemini", id="gemini_tab_id") as gemini_tab:
+                gemini_tab.select(on_tab_change, inputs=None, outputs=None)
+                gr.Markdown(
+                    "Requires `google-genai` package (`pip install google-genai`). "
+                    "Set `GOOGLE_API_KEY` env variable or fill the field below."
+                )
+                with gr.Row(equal_height=True):
+                    gemini_model = gr.Dropdown(
+                        get_gemini_supported_models(), label="Model", value="gemini-2.5-pro-preview-tts",
+                        interactive=True, allow_custom_value=True,
+                        info="Gemini TTS model"
+                    )
+                    gemini_voice = gr.Dropdown(
+                        get_gemini_supported_voices(), label="Voice", value="Kore",
+                        interactive=True, allow_custom_value=True,
+                        info="Voice for synthesis"
+                    )
+                    gemini_output_format = gr.Dropdown(
+                        get_gemini_supported_output_formats(), label="Output Format", value="wav",
+                        interactive=True,
+                        info="Audio output format"
+                    )
+                with gr.Row(equal_height=True):
+                    gemini_api_key = gr.Textbox(
+                        label="Google AI API Key", value="", type="password",
+                        interactive=True,
+                        info="Leave empty to use GOOGLE_API_KEY environment variable"
+                    )
+                    gemini_temperature = gr.Slider(
+                        minimum=0.0, maximum=1.0, step=0.05, label="Temperature", value=0.2,
+                        info="Sampling temperature (0=deterministic, 1=creative)"
+                    )
+                    gemini_speaker_map = gr.Textbox(
+                        label="Speaker Map (JSON, optional)", value="",
+                        interactive=True,
+                        info='Multi-speaker JSON, e.g. {"Alice":"Kore","Bob":"Puck"}. Leave empty for single-voice.'
+                    )
+
+            with gr.Tab("Kokoro", id="kokoro_tab_id") as kokoro_tab:
+                kokoro_tab.select(on_tab_change, inputs=None, outputs=None)
+                gr.Markdown(
+                    "Requires a running [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) server. "
+                    "You can start it using the provided `docker-compose.kokoro-example.yml`."
+                )
+                with gr.Row(equal_height=True):
+                    kokoro_model = gr.Dropdown(
+                        get_kokoro_supported_models(), label="Model", value="kokoro",
+                        interactive=True, allow_custom_value=True,
+                        info="Kokoro model variant"
+                    )
+                    kokoro_voice = gr.Dropdown(
+                        get_kokoro_supported_voices(), label="Voice", value="af_heart",
+                        interactive=True, allow_custom_value=True,
+                        info="Voice (use voice1+voice2 for mixing)"
+                    )
+                    kokoro_output_format = gr.Dropdown(
+                        get_kokoro_supported_output_formats(), label="Output Format", value="mp3",
+                        interactive=True,
+                        info="Audio output format"
+                    )
+                with gr.Row(equal_height=True):
+                    kokoro_base_url = gr.Textbox(
+                        label="Kokoro Server URL", value="http://localhost:8880",
+                        interactive=True,
+                        info="Base URL of the Kokoro-FastAPI server"
+                    )
+                    kokoro_speed = gr.Slider(
+                        minimum=0.25, maximum=4.0, step=0.05, label="Speed", value=1.0,
+                        info="Speech speed (1.0 = normal)"
+                    )
+                    kokoro_volume_multiplier = gr.Slider(
+                        minimum=0.1, maximum=3.0, step=0.1, label="Volume Multiplier", value=1.0,
+                        info="Volume adjustment multiplier"
+                    )
+
         gr.Markdown("---")
         with gr.Row(equal_height=True):
             gr.Button("Stop").click(
@@ -303,7 +458,10 @@ def host_ui(config):
                     azure_language, azure_voice, azure_output_format, azure_break_duration,
                     edge_language, edge_voice, edge_output_format, proxy, edge_voice_rate, edge_volume, edge_pitch, edge_break_duration,
                     piper_executable_path, piper_docker_image, piper_language, piper_voice, piper_quality, piper_speaker,
-                    piper_noise_scale, piper_noise_w_scale, piper_length_scale, piper_sentence_silence
+                    piper_noise_scale, piper_noise_w_scale, piper_length_scale, piper_sentence_silence,
+                    qwen_api_key, qwen_voice, qwen_model, qwen_language_type, qwen_stream, qwen_request_timeout,
+                    gemini_api_key, gemini_model, gemini_voice, gemini_output_format, gemini_temperature, gemini_speaker_map,
+                    kokoro_base_url, kokoro_voice, kokoro_model, kokoro_output_format, kokoro_speed, kokoro_volume_multiplier,
                 ],
                 outputs=None)
         with gr.Row():

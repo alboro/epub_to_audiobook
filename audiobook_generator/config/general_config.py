@@ -106,5 +106,23 @@ class GeneralConfig:
         self.piper_length_scale = getattr(args, 'piper_length_scale', None)
         self.piper_sentence_silence = getattr(args, 'piper_sentence_silence', None)
 
+        # TTS provider: Qwen3 specific arguments
+        self.qwen_api_key = getattr(args, 'qwen_api_key', None)
+        self.qwen_language_type = getattr(args, 'qwen_language_type', None)
+        self.qwen_stream = getattr(args, 'qwen_stream', None)
+        self.qwen_request_timeout = getattr(args, 'qwen_request_timeout', None)
+
+        # TTS provider: Gemini specific arguments
+        self.gemini_api_key = getattr(args, 'gemini_api_key', None)
+        self.gemini_sample_rate = getattr(args, 'gemini_sample_rate', None)
+        self.gemini_channels = getattr(args, 'gemini_channels', None)
+        self.gemini_audio_encoding = getattr(args, 'gemini_audio_encoding', None)
+        self.gemini_temperature = getattr(args, 'gemini_temperature', None)
+        self.gemini_speaker_map = getattr(args, 'gemini_speaker_map', None)
+
+        # TTS provider: Kokoro specific arguments
+        self.kokoro_base_url = getattr(args, 'kokoro_base_url', None)
+        self.kokoro_volume_multiplier = getattr(args, 'kokoro_volume_multiplier', None)
+
     def __str__(self):
         return ",\n".join(f"{key}={value}" for key, value in self.__dict__.items())

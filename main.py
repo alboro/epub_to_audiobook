@@ -434,6 +434,83 @@ def handle_args():
         help="Phoneme length, a.k.a. speaking rate",
     )
 
+    qwen_tts_group = parser.add_argument_group(title="qwen specific")
+    qwen_tts_group.add_argument(
+        "--qwen_api_key",
+        default=None,
+        help="Aliyun DashScope API key for Qwen3 TTS. Can also be set via DASHSCOPE_API_KEY env variable.",
+    )
+    qwen_tts_group.add_argument(
+        "--qwen_language_type",
+        default=None,
+        help=(
+            "Language type hint for Qwen3 TTS (e.g. Russian, Chinese, English). "
+            "Inferred from --language if not set. "
+            "Supported: Chinese, English, Spanish, Russian, Italian, French, Korean, Japanese, German, Portuguese."
+        ),
+    )
+    qwen_tts_group.add_argument(
+        "--qwen_stream",
+        action="store_true",
+        default=False,
+        help="Enable streaming synthesis for Qwen3 TTS (default: False).",
+    )
+    qwen_tts_group.add_argument(
+        "--qwen_request_timeout",
+        type=int,
+        default=30,
+        help="Request timeout in seconds for Qwen3 TTS API calls (default: 30).",
+    )
+
+    gemini_tts_group = parser.add_argument_group(title="gemini specific")
+    gemini_tts_group.add_argument(
+        "--gemini_api_key",
+        default=None,
+        help="Google AI API key for Gemini TTS. Can also be set via GOOGLE_API_KEY env variable.",
+    )
+    gemini_tts_group.add_argument(
+        "--gemini_sample_rate",
+        type=int,
+        default=24000,
+        help="PCM sample rate in Hz for Gemini TTS audio output (default: 24000).",
+    )
+    gemini_tts_group.add_argument(
+        "--gemini_channels",
+        type=int,
+        default=1,
+        choices=[1, 2],
+        help="Number of audio channels for Gemini TTS output: 1=mono, 2=stereo (default: 1).",
+    )
+    gemini_tts_group.add_argument(
+        "--gemini_audio_encoding",
+        default="pcm16",
+        help="PCM encoding returned by Gemini API (default: pcm16). Supported: pcm16, pcm24, pcm32.",
+    )
+    gemini_tts_group.add_argument(
+        "--gemini_temperature",
+        type=float,
+        default=0.2,
+        help="Sampling temperature for Gemini TTS (0.0–1.0, default: 0.2).",
+    )
+    gemini_tts_group.add_argument(
+        "--gemini_speaker_map",
+        default=None,
+        help='JSON object mapping speaker names to Gemini voices, e.g. \'{"Alice":"Kore","Bob":"Puck"}\'. Used for multi-speaker synthesis.',
+    )
+
+    kokoro_tts_group = parser.add_argument_group(title="kokoro specific")
+    kokoro_tts_group.add_argument(
+        "--kokoro_base_url",
+        default="http://localhost:8880",
+        help="Base URL of the Kokoro-FastAPI server (default: http://localhost:8880).",
+    )
+    kokoro_tts_group.add_argument(
+        "--kokoro_volume_multiplier",
+        type=float,
+        default=1.0,
+        help="Volume multiplier for Kokoro TTS output (default: 1.0).",
+    )
+
     args = parser.parse_args()
     return GeneralConfig(args)
 
