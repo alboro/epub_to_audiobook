@@ -1,20 +1,50 @@
 # EPUB/FB2 to Audiobook Converter
 
-This repository is a fork of [p0n1/epub_to_audiobook](https://github.com/p0n1/epub_to_audiobook).
+A fork of [p0n1/epub_to_audiobook](https://github.com/p0n1/epub_to_audiobook).
 
-The original project converts EPUB ebooks into audiobooks with multiple TTS backends.
+**Focus:** practical self-hosted audiobook production.
+The original project is a solid base; this fork extends it toward a more complete workflow —
+richer input format support, more TTS backend choices, and a Russian text normalization pipeline
+tuned for high-quality synthesis.
 
-This fork keeps that base and adds work aimed at a more practical self-hosted workflow:
+Interesting work found across the fork ecosystem is consolidated here rather than left scattered.
+Useful improvements will be proposed back to the upstream project as pull requests over time.
 
-- optional text normalization before TTS
-- optional polling-based TTS flow for OpenAI-compatible job APIs
-- optional `m4b` packaging with `ffmpeg`
+**Supported input formats:** EPUB, FB2.
 
-The goal of this fork is still simple:
+## Added in this fork
 
-`EPUB/FB2 -> audiobook`
+### TTS providers
 
-Default behavior is intended to remain close to the original project unless the new options are explicitly enabled.
+In addition to the original Azure / Edge / OpenAI / Piper backends:
+
+| Provider | Source | Notes |
+|---|---|---|
+| **Qwen3** (`--tts qwen`) | [7enChan/reson](https://github.com/7enChan/reson) | Aliyun DashScope API. Supports Russian. Voices: Cherry, Ethan and others. Optional dep: `dashscope`. |
+| **Gemini** (`--tts gemini`) | [7enChan/reson](https://github.com/7enChan/reson) | Google GenAI SDK, `gemini-2.5-pro-preview-tts`. Multi-speaker map support. Optional dep: `google-genai`. |
+| **Kokoro** (`--tts kokoro`) | [kroryan/epub_to_audiobook](https://github.com/kroryan/epub_to_audiobook) | [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) backend with voice mixing. See `docker-compose.kokoro-example.yml`. |
+
+### Russian text normalization
+
+A pipeline of composable normalizer steps (see [Normalizer steps](#normalizer-steps) below):
+numbers, initials, abbreviations, stress disambiguation via LLM, proper nouns, safe sentence splitting, and more.
+
+Stress data is sourced from the bundled `tsnorm` dictionary and optionally from
+[gramdict/zalizniak-2010](https://github.com/gramdict/zalizniak-2010) (~110k lemmas, CC BY-NC),
+cached locally in SQLite.
+
+### prepare_text workflow
+
+New `prepare_text` workflow for reviewable chapter audio:
+
+1. `prepare_text`:
+   Parse the EPUB/FB2 into chapters, optionally normalize each chapter, and write per-chapter UTF-8 `.txt` files for manual review.
+2. Review:
+   Open the generated chapter `.txt` files, edit them as needed, and save the reviewed text.
+3. TTS:
+   Run the converter again with `--prepared_text_folder` to synthesize audio from the reviewed chapter files instead of re-normalizing the raw EPUB text.
+
+This keeps chapter splitting and packaging from the tool, but moves quality control to a clean review step before audio generation.
 
 ## Quick Start
 
@@ -27,16 +57,6 @@ bash scripts/run_preview_macos.sh
 
 More detailed notes and an OpenAI-compatible example live in [docs/macos.md](docs/macos.md).
 
-Recommended workflow for preprocessing and review:
-
-1. `prepare_text`:
-   Parse the EPUB/FB2 into chapters, optionally normalize each chapter, and write per-chapter UTF-8 `.txt` files for manual review.
-2. Review:
-   Open the generated chapter `.txt` files, edit them as needed, and save the reviewed text.
-3. TTS:
-   Run the converter again with `--prepared_text_folder` to synthesize audio from the reviewed chapter files instead of re-normalizing the raw EPUB text.
-
-This keeps chapter splitting and packaging from the tool, but moves quality control to a clean review step before audio generation.
 
 Verified self-hosted TTS integration:
 
@@ -140,10 +160,9 @@ Built-in normalizer steps:
 
 - `simple_symbols`
   Replaces risky typography with simpler ASCII variants:
-  `«` -> `"`
-  `»` -> `"`
-  `—` -> `-`
-  `…` -> `...`
+  `«` `»` `"` `"` → backtick `` ` ``
+  `—` → `-`
+  `…` → `...`
 - `initials_ru`
   Rewrites Russian initials before surnames into XTTS-friendlier spoken forms.
   Example: `Е. Д. Калашниковой` -> `Е-Дэ Калашниковой`.
