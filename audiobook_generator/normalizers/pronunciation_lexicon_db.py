@@ -12,6 +12,7 @@ from audiobook_generator.normalizers.tsnorm_support import load_tsnorm_dictionar
 
 SCHEMA_VERSION = 1
 TSNORM_SOURCE = "tsnorm"
+ZALIZNIAK_SOURCE = "zalizniak"
 PROPER_NAME_POS_TAGS = {"PNOUN", "CHARACTER"}
 
 
@@ -275,15 +276,65 @@ def get_default_pronunciation_lexicon_db_path() -> Path:
 
 def ensure_pronunciation_lexicon_db(
     path: str | Path | None = None,
+    *,
+    include_zalizniak: bool = False,
 ) -> PronunciationLexiconDB:
+    """
+    Open (or create) the pronunciation lexicon DB and ensure all requested
+    sources are built.
+
+    Parameters
+    ----------
+    path:
+        Path to the SQLite file.  Defaults to
+        ``.cache/ru_pronunciation_lexicon.sqlite3`` in the project root.
+    include_zalizniak:
+        When True, also populate the ``zalizniak`` source (lemma-level stress
+        from gramdict/zalizniak-2010).  Requires internet access on first run;
+        data is then cached in ``.cache/zalizniak/``.
+    """
     database = PronunciationLexiconDB(path or get_default_pronunciation_lexicon_db_path())
     built_sources = json.loads(database.get_metadata("built_sources") or "[]")
+
     if TSNORM_SOURCE not in built_sources:
         if database.count_source_entries(TSNORM_SOURCE) == 0:
             build_tsnorm_pronunciation_lexicon(database)
         built_sources = sorted(set(built_sources + [TSNORM_SOURCE]))
         database.set_metadata("built_sources", json.dumps(built_sources, ensure_ascii=False))
+
+    if include_zalizniak and ZALIZNIAK_SOURCE not in built_sources:
+        if database.count_source_entries(ZALIZNIAK_SOURCE) == 0:
+            build_zalizniak_pronunciation_lexicon(database)
+        built_sources = sorted(set(built_sources + [ZALIZNIAK_SOURCE]))
+        database.set_metadata("built_sources", json.dumps(built_sources, ensure_ascii=False))
+
     return database
+
+
+def build_zalizniak_pronunciation_lexicon(
+    database: PronunciationLexiconDB,
+    *,
+    force_refresh: bool = False,
+) -> int:
+    """
+    Populate the DB with lemma-level stress entries sourced from the
+    gramdict/zalizniak-2010 repository (CC BY-NC).
+
+    On first call the text files are downloaded from GitHub and cached in
+    ``.cache/zalizniak/``.  Subsequent calls reuse the cached files unless
+    ``force_refresh=True``.
+
+    Returns the number of entries stored.
+    """
+    from audiobook_generator.normalizers.zalizniak_support import iter_zalizniak_entries
+
+    entries = iter_zalizniak_entries(force_refresh=force_refresh)
+    count = database.replace_source_entries(source=ZALIZNIAK_SOURCE, entries=entries)
+    database.set_metadata(
+        "source:zalizniak:stats",
+        json.dumps(database.get_stats(), ensure_ascii=False),
+    )
+    return count
 
 
 def build_tsnorm_pronunciation_lexicon(

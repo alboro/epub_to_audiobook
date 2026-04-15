@@ -522,7 +522,7 @@ class TestDeterministicRuNormalizers(unittest.TestCase):
         normalizer = SimpleSymbolsNormalizer(make_config(normalize_steps="simple_symbols"))
         self.assertEqual(
             normalizer.normalize('Текст\u200b с\u00a0мусором • и™ акце́нтом… «цитата» — 42'),
-            'Текст с мусором и акце́нтом... "цитата" - 42',
+            'Текст с мусором и акце́нтом... `цитата` - 42',
         )
 
     def test_plus_stress_to_combining_acute(self):

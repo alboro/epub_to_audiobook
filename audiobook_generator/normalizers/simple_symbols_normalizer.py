@@ -11,14 +11,14 @@ from audiobook_generator.normalizers.ru_text_utils import COMBINING_ACUTE
 logger = logging.getLogger(__name__)
 
 CHAR_REPLACEMENTS = {
-    "\u00ab": '`',
-    "\u00bb": '`',
-    "\u201c": '`',
-    "\u201d": '`',
-    "\u201e": '`',
-    "\u201f": '`',
-    "\u2033": '`',
-    "\u2036": '`',
+    "\u00ab": '`',   # «
+    "\u00bb": '`',   # »
+    "\u201c": '`',   # "
+    "\u201d": '`',   # "
+    "\u201e": '`',   # „
+    "\u201f": '`',   # ‟
+    "\u2033": '`',   # ″
+    "\u2036": '`',   # ‶
     "\u2018": "'",
     "\u2019": "'",
     "\u201a": "'",
