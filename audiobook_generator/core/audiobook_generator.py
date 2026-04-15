@@ -16,6 +16,9 @@ from audiobook_generator.utils.filename_sanitizer import make_safe_filename
 
 logger = logging.getLogger(__name__)
 
+# Known audio extensions to scan when packaging without a TTS provider.
+_AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".opus", ".aac", ".m4a", ".flac"]
+
 
 def confirm_conversion():
     logger.info("Do you want to continue? (y/n)")
@@ -176,6 +179,79 @@ class AudiobookGenerator:
 
         return text, text_file
 
+    def _find_audio_file(self, output_dir, idx, title):
+        """Find an existing audio file for a chapter by trying known extensions."""
+        for ext in _AUDIO_EXTENSIONS:
+            safe_name = make_safe_filename(
+                title=title,
+                idx=idx,
+                output_dir=output_dir,
+                ext=ext,
+                collision_check=False,
+            )
+            path = os.path.join(output_dir, safe_name)
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _run_package_only(self):
+        """Package existing chapter audio files into m4b without running TTS."""
+        logger.info("Package mode: packaging existing audio files from %s", self.config.output_folder)
+        book_parser = get_book_parser(self.config)
+        os.makedirs(self.config.output_folder, exist_ok=True)
+
+        # Use a generic break string — we only need chapter list and metadata, not TTS.
+        chapters = book_parser.get_chapters(break_string="")
+        chapters = [(title, text) for title, text in chapters if text.strip()]
+
+        if self.config.chapter_end == -1 or self.config.chapter_end is None:
+            self.config.chapter_end = len(chapters)
+        if self.config.chapter_start is None:
+            self.config.chapter_start = 1
+
+        chapters_to_package = chapters[self.config.chapter_start - 1: self.config.chapter_end]
+
+        chapter_files = []
+        chapter_titles = []
+        missing = []
+
+        for idx, (title, _text) in enumerate(chapters_to_package, start=self.config.chapter_start):
+            path = self._find_audio_file(self.config.output_folder, idx, title)
+            if path:
+                chapter_files.append(path)
+                chapter_titles.append(title)
+            else:
+                missing.append((idx, title))
+
+        if missing:
+            logger.warning("Audio files not found for %d chapter(s):", len(missing))
+            for idx, title in missing:
+                logger.warning("  Chapter %d: %s", idx, title)
+
+        if not chapter_files:
+            logger.error("No audio files found in %s. Run 'audio' mode first.", self.config.output_folder)
+            return
+
+        if len(missing) > 0:
+            logger.warning(
+                "Packaging %d of %d chapters (missing audio skipped).",
+                len(chapter_files),
+                len(chapters_to_package),
+            )
+
+        m4b_path = package_m4b(
+            chapter_files=chapter_files,
+            chapter_titles=chapter_titles,
+            book_title=book_parser.get_book_title(),
+            book_author=book_parser.get_book_author(),
+            output_dir=self.config.output_folder,
+            ffmpeg_path=self.config.ffmpeg_path,
+            output_filename=self.config.m4b_filename,
+            bitrate=self.config.m4b_bitrate,
+            cover=book_parser.get_book_cover(),
+        )
+        logger.info("✅ Packaged m4b audiobook: %s", m4b_path)
+
     def process_chapter(self, idx, title, text, book_parser):
         """Process a single chapter: write text (if needed) and convert to audio."""
         try:
@@ -256,6 +332,25 @@ class AudiobookGenerator:
     def run(self):
         try:
             logger.info("Starting audiobook generation...")
+
+            # Map --mode to internal flags.  Legacy code (mode=None) keeps its existing flags.
+            mode = getattr(self.config, 'mode', None)
+            if mode == 'prepare':
+                self.config.prepare_text = True
+                self.config.package_m4b = False
+                logger.info("Mode: prepare — parsing + normalizing, writing review .txt files.")
+            elif mode == 'audio':
+                self.config.prepare_text = False
+                self.config.package_m4b = False
+                logger.info("Mode: audio — synthesizing audio from text.")
+            elif mode == 'package':
+                self._run_package_only()
+                return
+            elif mode == 'all':
+                self.config.prepare_text = False
+                self.config.package_m4b = True
+                logger.info("Mode: all — normalize + synthesize + package.")
+
             book_parser = get_book_parser(self.config)
             tts_provider = get_tts_provider(self.config)
 

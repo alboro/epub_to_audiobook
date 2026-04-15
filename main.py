@@ -15,6 +15,18 @@ def handle_args():
     parser.add_argument("input_file", help="Path to the input book file (EPUB or FB2)")
     parser.add_argument("output_folder", help="Path to the output folder")
     parser.add_argument(
+        "--mode",
+        choices=["prepare", "audio", "package", "all"],
+        required=True,
+        help=(
+            "Generation stage to run:\n"
+            "  prepare  — parse book, normalize text, write per-chapter .txt files for review;\n"
+            "  audio    — synthesize audio from per-chapter .txt (--prepared_text_folder) or raw book text;\n"
+            "  package  — package existing chapter audio files in output_folder into a single .m4b;\n"
+            "  all      — normalize + synthesize + package in one pass (full pipeline)."
+        ),
+    )
+    parser.add_argument(
         "--tts",
         choices=get_supported_tts_providers(),
         default=get_supported_tts_providers()[0],

@@ -3,6 +3,8 @@ class GeneralConfig:
         # General arguments
         self.input_file = getattr(args, 'input_file', None)
         self.output_folder = getattr(args, 'output_folder', None)
+        # Generation mode: prepare | audio | package | all (None = legacy, use individual flags)
+        self.mode = getattr(args, 'mode', None)
         self.preview = getattr(args, 'preview', None)
         self.output_text = getattr(args, 'output_text', None)
         self.prepare_text = getattr(args, 'prepare_text', None)
