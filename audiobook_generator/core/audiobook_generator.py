@@ -224,6 +224,14 @@ class AudiobookGenerator:
 
         text_file = self._chapter_text_path(self.config.prepared_text_folder, idx, title)
         if not os.path.exists(text_file):
+            # If the folder was auto-detected (not explicitly set by user), fall back
+            # to source text instead of hard failing.
+            if getattr(self.config, '_prepared_text_folder_auto', False):
+                logger.debug(
+                    "Reviewed text file not found for chapter %s at %s; using source text.",
+                    idx, text_file,
+                )
+                return None, None
             raise FileNotFoundError(
                 f"Reviewed text file not found for chapter {idx}: {text_file}"
             )
@@ -572,8 +580,20 @@ class AudiobookGenerator:
             if mode in ('prepare', 'all'):
                 if self.config.force_new_run:
                     # Force creating new run directory
+                    prev_index = self._latest_run_index("text")
                     run_index = self._next_run_index("text")
                     logger.info("Force new run: created text/%s", run_index)
+                    # Auto-detect previous text run as source for chapters (so reviewed
+                    # .txt files are used instead of re-parsing from the book file).
+                    if prev_index and not self.config.prepared_text_folder:
+                        prev_text_dir = str(self._run_subdir("text") / prev_index)
+                        if os.path.isdir(prev_text_dir):
+                            self.config.prepared_text_folder = prev_text_dir
+                            self.config._prepared_text_folder_auto = True
+                            logger.info(
+                                "Auto-detected previous prepare run as text source: text/%s → text/%s",
+                                prev_index, run_index,
+                            )
                 else:
                     # Check if we can resume latest run
                     latest_index, can_resume = self._can_resume_latest_run("text")
@@ -595,6 +615,7 @@ class AudiobookGenerator:
                     auto_text_dir = str(self._run_subdir("text") / latest_text)
                     if os.path.isdir(auto_text_dir):
                         self.config.prepared_text_folder = auto_text_dir
+                        self.config._prepared_text_folder_auto = True
                         logger.info("Auto-detected text source for audio mode: %s", auto_text_dir)
             else:
                 run_index = None  # legacy path, no structured layout
@@ -624,9 +645,14 @@ class AudiobookGenerator:
                     f"Prepared text folder not found: {self.config.prepared_text_folder}"
                 )
             if self.config.prepared_text_folder and self.config.normalize:
-                logger.warning(
-                    "Both --prepared_text_folder and --normalize are enabled. Reviewed text will be normalized again before TTS."
-                )
+                if getattr(self.config, 'prepare_text', False):
+                    logger.info(
+                        "Re-prepare mode: reviewed text from previous run will be re-normalized and written to new run."
+                    )
+                else:
+                    logger.warning(
+                        "Both --prepared_text_folder and --normalize are enabled. Reviewed text will be normalized again before TTS."
+                    )
             if self.config.prepare_text:
                 logger.info("Prepare-text mode enabled. Chapters will be exported for review and TTS will be skipped.")
             if self.config.prepare_text and self.config.package_m4b:

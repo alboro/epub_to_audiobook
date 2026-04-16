@@ -63,41 +63,41 @@ def handle_args():
     )
     parser.add_argument(
         "--language",
-        default="en-US",
+        default=None,
         help="Language for the text-to-speech service (default: en-US). For Azure TTS (--tts=azure), check https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#text-to-speech for supported languages. For OpenAI TTS (--tts=openai), their API detects the language automatically. But setting this will also help on splitting the text into chunks with different strategies in this tool, especially for Chinese characters. For Chinese books, use zh-CN, zh-TW, or zh-HK.",
     )
     parser.add_argument(
         "--newline_mode",
         choices=["single", "double", "none"],
-        default="double",
-        help="Choose the mode of detecting new paragraphs: 'single', 'double', or 'none'. 'single' means a single newline character, while 'double' means two consecutive newline characters. 'none' means all newline characters will be replace with blank so paragraphs will not be detected. (default: double, works for most ebooks but will detect less paragraphs for some ebooks)",
+        default=None,
+        help="Choose the mode of detecting new paragraphs: 'single', 'double', or 'none'. (default: double)",
     )
     parser.add_argument(
         "--title_mode",
         choices=["auto", "tag_text", "first_few"],
-        default="auto",
-        help="Choose the parse mode for chapter title, 'tag_text' search 'title','h1','h2','h3' tag for title, 'first_few' set first 60 characters as title, 'auto' auto apply the best mode for current chapter.",
+        default=None,
+        help="Choose the parse mode for chapter title. (default: auto)",
     )
     parser.add_argument(
         "--chapter_mode",
         choices=["documents", "toc_sections"],
-        default="documents",
+        default=None,
         help=(
             "Choose how book content is grouped into chapters. "
             "'documents' keeps one chapter per XHTML document (EPUB) or per leaf section (FB2). "
-            "'toc_sections' groups EPUB documents by top-level table-of-contents sections when possible "
-            "(not applicable for FB2, falls back to per-section mode)."
+            "'toc_sections' groups EPUB documents by top-level table-of-contents sections when possible. "
+            "(default: documents)"
         ),
     )
     parser.add_argument(
         "--chapter_start",
-        default=1,
+        default=None,
         type=int,
         help="Chapter start index (default: 1, starting from 1)",
     )
     parser.add_argument(
         "--chapter_end",
-        default=-1,
+        default=None,
         type=int,
         help="Chapter end index (default: -1, meaning to the last chapter)",
     )
@@ -113,7 +113,7 @@ def handle_args():
 
     parser.add_argument(
         "--search_and_replace_file",
-        default="",
+        default=None,
         help="""Path to a file that contains 1 regex replace per line, to help with fixing pronunciations, etc. The format is:
         <search>==<replace>
         Note that you may have to specify word boundaries, to avoid replacing parts of words.
@@ -123,10 +123,8 @@ def handle_args():
     parser.add_argument(
         "--worker_count",
         type=int,
-        default=1,
-        help="Specifies the number of parallel workers to use for audiobook generation. "
-        "Increasing this value can significantly speed up the process by processing multiple chapters simultaneously. "
-        "Note: Chapters may not be processed in sequential order, but this will not affect the final audiobook.",
+        default=None,
+        help="Specifies the number of parallel workers to use for audiobook generation. (default: 1)",
     )
 
     parser.add_argument(
@@ -569,6 +567,20 @@ def handle_args():
     # Apply defaults for args that weren't set via CLI or INI
     if not getattr(args, "tts", None):
         args.tts = get_supported_tts_providers()[0]  # default: azure
+    if not getattr(args, "language", None):
+        args.language = "en-US"
+    if not getattr(args, "newline_mode", None):
+        args.newline_mode = "double"
+    if not getattr(args, "title_mode", None):
+        args.title_mode = "auto"
+    if not getattr(args, "chapter_mode", None):
+        args.chapter_mode = "documents"
+    if getattr(args, "chapter_start", None) is None:
+        args.chapter_start = 1
+    if getattr(args, "chapter_end", None) is None:
+        args.chapter_end = -1
+    if getattr(args, "worker_count", None) is None:
+        args.worker_count = 1
     if not getattr(args, "normalize", None):
         args.normalize = False
     if not getattr(args, "openai_enable_polling", None):
