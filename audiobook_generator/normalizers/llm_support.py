@@ -443,13 +443,11 @@ def resolve_normalizer_llm_settings(config: GeneralConfig) -> NormalizerLLMSetti
     base_url = (
         config.normalize_base_url
         or os.getenv("NORMALIZER_OPENAI_BASE_URL")
-        or config.openai_base_url
         or os.getenv("OPENAI_BASE_URL")
     )
     api_key = (
         config.normalize_api_key
         or os.getenv("NORMALIZER_OPENAI_API_KEY")
-        or config.openai_api_key
         or os.getenv("OPENAI_API_KEY")
     )
 
