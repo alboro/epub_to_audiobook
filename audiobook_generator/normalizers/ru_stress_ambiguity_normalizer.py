@@ -68,7 +68,7 @@ class StressAmbiguityCandidate:
 
 
 class StressAmbiguityLLMNormalizer(BaseNormalizer):
-    STEP_NAME = "stress_ambiguity_llm"
+    STEP_NAME = "ru_stress_ambiguity"
     STEP_VERSION = 3
 
     def __init__(self, config: GeneralConfig):
@@ -402,7 +402,7 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
             return []
 
         from audiobook_generator.normalizers.ru_tts_stress_paradox_guard import get_paradox_guard
-        paradox_guard = get_paradox_guard()
+        paradox_guard = get_paradox_guard(self.config)
 
         candidates: list[StressAmbiguityCandidate] = []
         item_index = 1

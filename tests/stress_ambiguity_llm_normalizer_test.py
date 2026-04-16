@@ -87,7 +87,7 @@ def make_config(**overrides) -> GeneralConfig:
         instructions=None,
         speed=1.0,
         normalize=True,
-        normalize_steps="stress_ambiguity_llm",
+        normalize_steps="ru_stress_ambiguity",
         normalize_provider="openai",
         normalize_model="gpt-5.4",
         normalize_prompt_file=None,

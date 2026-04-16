@@ -95,6 +95,9 @@ class GeneralConfig:
         self.normalize_tsnorm_min_word_length = getattr(
             args, 'normalize_tsnorm_min_word_length', None
         )
+        self.normalize_stress_paradox_words = getattr(
+            args, 'normalize_stress_paradox_words', None
+        )
 
         # TTS provider: Azure & Edge TTS specific arguments
         self.break_duration = getattr(args, 'break_duration', None)

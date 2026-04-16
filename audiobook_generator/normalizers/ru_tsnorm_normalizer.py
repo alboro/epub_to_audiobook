@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class TSNormRuNormalizer(BaseNormalizer):
-    STEP_NAME = "tsnorm_ru"
+    STEP_NAME = "ru_tsnorm"
 
     def __init__(self, config: GeneralConfig):
         self.stress_overrides = StressWordsRuNormalizer(config)

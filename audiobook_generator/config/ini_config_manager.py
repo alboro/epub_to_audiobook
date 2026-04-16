@@ -108,6 +108,7 @@ FIELD_SECTIONS: Dict[str, str] = {
     "normalize_tsnorm_stress_yo": "normalize",
     "normalize_tsnorm_stress_monosyllabic": "normalize",
     "normalize_tsnorm_min_word_length": "normalize",
+    "normalize_stress_paradox_words": "normalize",
     # [m4b] --------------------------------------------------------------------
     "package_m4b": "m4b",
     "chunked_audio": "m4b",

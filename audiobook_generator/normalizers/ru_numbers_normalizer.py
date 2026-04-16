@@ -281,7 +281,7 @@ CARDINAL_PATTERN = re.compile(r"(?<![\w/])(-?\d+)(?![\w/])")
 # ---------------------------------------------------------------------------
 
 class NumbersRuNormalizer(BaseNormalizer):
-    STEP_NAME = "numbers_ru"
+    STEP_NAME = "ru_numbers"
 
     def __init__(self, config: GeneralConfig):
         self.morph = MorphAnalyzer() if MorphAnalyzer is not None else None

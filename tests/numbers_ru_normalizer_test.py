@@ -89,7 +89,7 @@ def make_config(**overrides):
         instructions=None,
         speed=1.0,
         normalize=True,
-        normalize_steps="numbers_ru",
+        normalize_steps="ru_numbers",
         normalize_provider="openai",
         normalize_model="gpt-5.4",
         normalize_prompt_file=None,
@@ -479,14 +479,14 @@ class TestNumbersRuNormalizerNewNouns(unittest.TestCase):
 
 class TestDeterministicRuNormalizers(unittest.TestCase):
     def test_initials_ru(self):
-        normalizer = InitialsRuNormalizer(make_config(normalize_steps="initials_ru"))
+        normalizer = InitialsRuNormalizer(make_config(normalize_steps="ru_initials"))
         self.assertEqual(
             normalizer.normalize("вкратце о Е. Д. Калашниковой"),
             "вкратце о Е-Дэ-Калашниковой",
         )
 
     def test_initials_ru_with_extra_spaces(self):
-        normalizer = InitialsRuNormalizer(make_config(normalize_steps="initials_ru"))
+        normalizer = InitialsRuNormalizer(make_config(normalize_steps="ru_initials"))
         self.assertEqual(
             normalizer.normalize("вкратце о Е.   Д.   Калашниковой"),
             "вкратце о Е-Дэ-Калашниковой",
@@ -502,14 +502,14 @@ class TestDeterministicRuNormalizers(unittest.TestCase):
         )
 
     def test_stress_words_ru(self):
-        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="stress_words_ru"))
+        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="ru_stress_words"))
         self.assertEqual(
             normalizer.normalize("Это одно из чудес, а не все чудеса."),
             "Это одно из чуде́с, а не все чудеса́.",
         )
 
     def test_stress_words_ru_leaves_ambiguous_word_unchanged(self):
-        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="stress_words_ru"))
+        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="ru_stress_words"))
         self.assertEqual(
             normalizer.normalize("И после беды пришли новые беды."),
             "И после беды пришли новые беды.",
@@ -690,7 +690,7 @@ class TestSharedNormalizerLLMSupport(unittest.TestCase):
 
 class TestProperNounsRuNormalizer(unittest.TestCase):
     def test_accents_internal_proper_nouns(self):
-        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="proper_nouns_ru"))
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_nouns"))
         normalizer.backend = lambda text: {
             "Фицджеральда": "Фицджера́льда",
             "Калашниковой": "Кала́шниковой",
@@ -702,7 +702,7 @@ class TestProperNounsRuNormalizer(unittest.TestCase):
         )
 
     def test_skips_sentence_start_words(self):
-        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="proper_nouns_ru"))
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_nouns"))
         normalizer.backend = lambda text: text + COMBINING_ACUTE
         self.assertEqual(
             normalizer.normalize("Для ясности автор этой книжки не лингвист. Но Фицджеральда он помнит."),
@@ -714,7 +714,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_builds_pronunciation_variants_and_applies_selected_options(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_steps="ru_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -743,7 +743,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_prompt_artifacts_include_context_and_options(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_steps="ru_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -762,7 +762,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_skips_generic_leading_sentence_word_in_candidate(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_steps="ru_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -780,7 +780,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_collapses_double_stress_marks_from_backend(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_steps="ru_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -796,7 +796,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_post_step_artifacts_include_selection_stats(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="proper_nouns_pronunciation_ru",
+                normalize_steps="ru_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -847,7 +847,7 @@ class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
             )
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
-                    normalize_steps="stress_ambiguity_llm",
+                    normalize_steps="ru_stress_ambiguity",
                     normalize_base_url="http://127.0.0.1:1234/v1",
                     normalize_pronunciation_lexicon_db=str(db_path),
                 )
@@ -896,7 +896,7 @@ class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
             )
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
-                    normalize_steps="stress_ambiguity_llm",
+                    normalize_steps="ru_stress_ambiguity",
                     normalize_base_url="http://127.0.0.1:1234/v1",
                     normalize_pronunciation_lexicon_db=str(db_path),
                 )
@@ -932,7 +932,7 @@ class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
             )
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
-                    normalize_steps="stress_ambiguity_llm",
+                    normalize_steps="ru_stress_ambiguity",
                     normalize_base_url="http://127.0.0.1:1234/v1",
                     normalize_pronunciation_lexicon_db=str(db_path),
                 )
@@ -999,7 +999,7 @@ class TestTSNormRuNormalizerStressRuExploration(unittest.TestCase):
     def setUp(self):
         self.n = TSNormRuNormalizer(
             make_config(
-                normalize_steps="tsnorm_ru",
+                normalize_steps="ru_tsnorm",
                 normalize_tsnorm_stress_yo=True,
                 normalize_tsnorm_stress_monosyllabic=False,
                 normalize_tsnorm_min_word_length=2,
@@ -1035,7 +1035,7 @@ class TestTSNormRuNormalizerStressRuExploration(unittest.TestCase):
     def test_skips_non_russian_language(self):
         n_en = TSNormRuNormalizer(
             make_config(
-                normalize_steps="tsnorm_ru",
+                normalize_steps="ru_tsnorm",
                 language="en-US",
                 normalize_tsnorm_stress_yo=True,
                 normalize_tsnorm_stress_monosyllabic=False,
@@ -1046,19 +1046,19 @@ class TestTSNormRuNormalizerStressRuExploration(unittest.TestCase):
         self.assertEqual(n_en.normalize(text), text)
 
     def test_registered_as_stress_ru_alias(self):
-        from audiobook_generator.normalizers.base_normalizer import normalize_step_name, NORMALIZER_TSNORM_RU
-        self.assertEqual(normalize_step_name("stress_ru"), NORMALIZER_TSNORM_RU)
-        self.assertEqual(normalize_step_name("tsnorm_ru"), NORMALIZER_TSNORM_RU)
+        from audiobook_generator.normalizers.base_normalizer import normalize_step_name
+        from audiobook_generator.normalizers.ru_tsnorm_normalizer import TSNormRuNormalizer
+        self.assertEqual(normalize_step_name("ru_tsnorm"), TSNormRuNormalizer.STEP_NAME)
 
     def test_step_name(self):
-        self.assertEqual(self.n.get_step_name(), "tsnorm_ru")
+        self.assertEqual(self.n.get_step_name(), "ru_tsnorm")
 
 
 class TestAbbreviationsRuNormalizer(unittest.TestCase):
     """Tests for AbbreviationsRuNormalizer (TODO 3 evaluation of runorm / saarus72)."""
 
     def setUp(self):
-        self.n = AbbreviationsRuNormalizer(make_config(normalize_steps="abbreviations_ru"))
+        self.n = AbbreviationsRuNormalizer(make_config(normalize_steps="ru_abbreviations"))
 
     # --- Helper: acronym expansion ---
 
@@ -1134,19 +1134,19 @@ class TestAbbreviationsRuNormalizer(unittest.TestCase):
 
     def test_skips_non_russian_language(self):
         n_en = AbbreviationsRuNormalizer(
-            make_config(normalize_steps="abbreviations_ru", language="en-US")
+            make_config(normalize_steps="ru_abbreviations", language="en-US")
         )
         self.assertEqual(n_en.normalize("США и т.д."), "США и т.д.")
 
     # --- Pipeline registration ---
 
     def test_step_name(self):
-        self.assertEqual(self.n.get_step_name(), "abbreviations_ru")
+        self.assertEqual(self.n.get_step_name(), "ru_abbreviations")
 
     def test_registered_in_pipeline(self):
-        from audiobook_generator.normalizers.base_normalizer import normalize_step_name, NORMALIZER_ABBREVIATIONS_RU
-        self.assertEqual(normalize_step_name("abbreviations_ru"), NORMALIZER_ABBREVIATIONS_RU)
-        self.assertEqual(normalize_step_name("abbreviations"), NORMALIZER_ABBREVIATIONS_RU)
+        from audiobook_generator.normalizers.base_normalizer import normalize_step_name
+        from audiobook_generator.normalizers.ru_abbreviations_normalizer import AbbreviationsRuNormalizer
+        self.assertEqual(normalize_step_name("ru_abbreviations"), AbbreviationsRuNormalizer.STEP_NAME)
 
 
 if __name__ == "__main__":

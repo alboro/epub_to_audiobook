@@ -299,7 +299,7 @@ def handle_args():
         help=(
             "Comma-separated normalizer steps to apply in order. "
             "When set, --normalize_provider is ignored. "
-            "Example: simple_symbols,ru_initials,ru_numbers,ru_stress_words,ru_llm_stress_ambiguity,tts_safe_split"
+            "Example: simple_symbols,ru_initials,ru_numbers,ru_stress_words,ru_stress_ambiguity,tts_safe_split"
         ),
     )
     normalizer_group.add_argument(
@@ -372,7 +372,7 @@ def handle_args():
         "--normalize_stress_exceptions_file",
         help=(
             "Optional UTF-8 file with per-line stress overrides in the form "
-            "'source==replacement'. Use this with stress_words_ru or tsnorm_ru."
+            "'source==replacement'. Use this with ru_stress_words or ru_tsnorm."
         ),
     )
     normalizer_group.add_argument(
@@ -380,26 +380,26 @@ def handle_args():
         help=(
             "Optional UTF-8 file with per-line ambiguity variants in the form "
             "'source==variant1|variant2'. Variants may use combining acute accents or "
-            "Silero-style plus notation such as 'б+еды|бед+ы'. Use this with stress_ambiguity_llm."
+            "Silero-style plus notation such as 'б+еды|бед+ы'. Use this with ru_stress_ambiguity."
         ),
     )
     normalizer_group.add_argument(
         "--normalize_tsnorm_stress_yo",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="When tsnorm_ru is enabled, restore or keep 'ё' where the backend can determine it (default: on).",
+        help="When ru_tsnorm is enabled, restore or keep 'ё' where the backend can determine it (default: on).",
     )
     normalizer_group.add_argument(
         "--normalize_tsnorm_stress_monosyllabic",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="When tsnorm_ru is enabled, also add stress marks to monosyllabic words (default: off).",
+        help="When ru_tsnorm is enabled, also add stress marks to monosyllabic words (default: off).",
     )
     normalizer_group.add_argument(
         "--normalize_tsnorm_min_word_length",
         default=2,
         type=int,
-        help="Minimum token length for tsnorm_ru stress processing (default: 2).",
+        help="Minimum token length for ru_tsnorm stress processing (default: 2).",
     )
 
     edge_tts_group = parser.add_argument_group(title="edge specific")

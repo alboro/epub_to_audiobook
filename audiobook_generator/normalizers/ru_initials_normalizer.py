@@ -51,7 +51,7 @@ RUSSIAN_LETTER_NAMES = {
 
 
 class InitialsRuNormalizer(BaseNormalizer):
-    STEP_NAME = "initials_ru"
+    STEP_NAME = "ru_initials"
 
     def __init__(self, config: GeneralConfig):
         super().__init__(config)

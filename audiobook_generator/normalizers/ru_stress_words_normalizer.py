@@ -29,7 +29,7 @@ BUILTIN_STRESS_OVERRIDES = {
 
 
 class StressWordsRuNormalizer(BaseNormalizer):
-    STEP_NAME = "stress_words_ru"
+    STEP_NAME = "ru_stress_words"
 
     def __init__(self, config: GeneralConfig):
         self.replacements = BUILTIN_STRESS_OVERRIDES.copy()

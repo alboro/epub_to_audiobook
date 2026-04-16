@@ -105,9 +105,9 @@ Configure via `normalize_steps` in INI or `--normalize_steps` CLI flag.
 | `ru_abbreviations` | Expands common Russian abbreviations |
 | `tts_pronunciation_overrides` | Applies TTS-specific overrides for known problem words |
 | `ru_stress_words` | Adds stress marks for curated list of frequently mispronounced words |
-| `ru_llm_stress_ambiguity` | Sends only true homographs to LLM for contextual stress disambiguation |
-| `ru_proper_nouns` | Adds stress marks to likely proper nouns using tsnorm |
-| `ru_llm_proper_nouns` | Asks LLM to choose TTS-safe pronunciation for proper names |
+| `ru_stress_ambiguity`     | Sends only true homographs to LLM for contextual stress disambiguation |
+| `ru_proper_nouns`         | Adds stress marks to likely proper nouns using tsnorm |
+| `ru_proper_nouns_pronunciation` | Asks LLM to choose TTS-safe pronunciation for proper names |
 | `ru_tsnorm` | Broader Russian stress + `ё` restoration via tsnorm backend |
 | `tts_safe_split` | Splits overlong sentences to fit TTS model limits |
 | `ru_numbers` | Expands numbers to words (`17-й` → `семнадцатый`, `№5` → `номер пять`) |
@@ -115,7 +115,7 @@ Configure via `normalize_steps` in INI or `--normalize_steps` CLI flag.
 
 **Recommended chain for Russian XTTS:**
 ```
-simple_symbols,ru_initials,ru_numbers,ru_llm_stress_ambiguity,ru_llm_proper_nouns,tts_safe_split
+simple_symbols,ru_initials,ru_numbers,ru_stress_ambiguity,ru_proper_nouns_pronunciation,tts_safe_split
 ```
 
 ---

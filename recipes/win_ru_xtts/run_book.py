@@ -17,8 +17,8 @@ from audiobook_generator.normalizers.pronunciation_lexicon_db import (
 )
 
 DEFAULT_NORMALIZE_STEPS = (
-    "simple_symbols,ru_initials,ru_numbers,ru_llm_stress_ambiguity,"
-    "ru_llm_proper_nouns,tts_safe_split"
+    "simple_symbols,ru_initials,ru_numbers,ru_stress_ambiguity,"
+    "ru_proper_nouns_pronunciation,tts_safe_split"
 )
 DEFAULT_NORMALIZE_MODEL = "gpt-5.4"
 DEFAULT_VOICE_NAME = "reference_long"

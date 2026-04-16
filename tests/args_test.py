@@ -133,7 +133,7 @@ class TestModeImpliesFlags(unittest.TestCase):
         self.assertTrue(config.package_m4b)
 
     def test_all_mode_enables_normalize_when_steps_set(self):
-        config = self._make_config('all', normalize_steps='simple_symbols,numbers_ru')
+        config = self._make_config('all', normalize_steps='simple_symbols,ru_numbers')
         config = self._apply_mode(config)
         self.assertTrue(config.normalize)
 

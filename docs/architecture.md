@@ -60,8 +60,7 @@ Normalizers are chained via `normalize_steps` config. Each step receives the out
 
 - `simple_*` — language-agnostic text cleanup
 - `tts_*` — TTS-agnostic but TTS-oriented transforms
-- `ru_*` — Russian-specific deterministic normalizers  
-- `ru_llm_*` — Russian-specific normalizers that call an LLM
+- `ru_*` — Russian-specific normalizers (deterministic and LLM-based alike)
 - `openai` — generic LLM full-text rewrite
 
 ### Resumable Steps
@@ -75,7 +74,7 @@ Steps that involve LLM calls support chunked resume via SQLite:
 
 `ru_tts_stress_paradox_guard.py` — singleton service that tracks words where adding a stress mark
 causes the TTS server to *mispronounce* the word. These words are excluded from LLM stress
-disambiguation candidates. Currently injected into `ru_llm_stress_ambiguity`.
+disambiguation candidates. Currently injected into `ru_stress_ambiguity`.
 
 ---
 
@@ -133,7 +132,7 @@ MyBook/
 │                   ├── 01_ru_initials/
 │                   │   ├── input.txt
 │                   │   └── output.txt
-│                   └── 02_ru_llm_stress_ambiguity/
+                    └── 02_ru_stress_ambiguity/
 │                       ├── input.txt
 │                       ├── output.txt
 │                       └── 00_choice_system_prompt.txt

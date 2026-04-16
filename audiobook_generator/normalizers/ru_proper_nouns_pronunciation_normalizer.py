@@ -143,7 +143,7 @@ class ProperNounCandidate:
 
 
 class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
-    STEP_NAME = "proper_nouns_pronunciation_ru"
+    STEP_NAME = "ru_proper_nouns_pronunciation"
     STEP_VERSION = 2
 
     def __init__(self, config: GeneralConfig):

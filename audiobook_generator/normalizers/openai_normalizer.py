@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAINormalizer(BaseNormalizer):
-    STEP_NAME = "llm"
+    STEP_NAME = "openai"
     STEP_VERSION = 2
 
     def __init__(self, config: GeneralConfig):

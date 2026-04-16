@@ -114,7 +114,7 @@ class AbbreviationsRuNormalizer(BaseNormalizer):
     ``_expand_acronym()`` function is used instead.
     """
 
-    STEP_NAME = "abbreviations_ru"
+    STEP_NAME = "ru_abbreviations"
 
     def __init__(self, config: GeneralConfig):
         # Pre-initialise the optional runorm backend once (lazy-loaded on
