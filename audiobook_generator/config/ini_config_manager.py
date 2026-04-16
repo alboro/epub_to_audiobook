@@ -256,14 +256,24 @@ def merge_ini_into_args(args: Any, ini_values: Dict[str, Any]) -> None:
         current = getattr(args, key, None)
         if current is not None:
             continue  # CLI wins
-        # Coerce boolean strings
         if isinstance(raw_value, str):
-            if raw_value.lower() in ("true", "yes", "1"):
-                setattr(args, key, True)
-            elif raw_value.lower() in ("false", "no", "0"):
-                setattr(args, key, False)
+            if key in BOOL_FIELDS:
+                # Boolean fields: coerce "true"/"1"/"yes" → True, "false"/"0"/"no" → False
+                if raw_value.lower() in ("true", "yes", "1"):
+                    setattr(args, key, True)
+                else:
+                    setattr(args, key, False)
             else:
-                setattr(args, key, raw_value)
+                # Non-boolean fields: try numeric coercion, then keep as string
+                stripped = raw_value.strip()
+                try:
+                    coerced: Any = int(stripped)
+                except ValueError:
+                    try:
+                        coerced = float(stripped)
+                    except ValueError:
+                        coerced = raw_value
+                setattr(args, key, coerced)
         else:
             setattr(args, key, raw_value)
 

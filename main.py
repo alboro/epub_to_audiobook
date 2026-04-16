@@ -222,13 +222,15 @@ def handle_args():
     )
     openai_tts_group.add_argument(
         "--openai_max_chars",
-        default=1800,
+        default=None,
         type=int,
-        help="Local chunk size before sending text to the OpenAI TTS provider. Set to 0 or a negative value to disable local chunking.",
+        help="Local chunk size before sending text to the OpenAI TTS provider. Set to 0 or a negative value to disable local chunking. Default: 1800.",
     )
     openai_tts_group.add_argument(
         "--openai_enable_polling",
-        action="store_true",
+        action="store_const",
+        const=True,
+        default=None,
         help="Use submit/poll/download workflow instead of standard synchronous OpenAI TTS response handling.",
     )
     openai_tts_group.add_argument(
@@ -245,58 +247,60 @@ def handle_args():
     )
     openai_tts_group.add_argument(
         "--openai_job_id_path",
-        default="id",
+        default=None,
         help="Dot path to job id in submit response JSON (default: id).",
     )
     openai_tts_group.add_argument(
         "--openai_job_status_path",
-        default="status",
+        default=None,
         help="Dot path to job status in polling response JSON (default: status).",
     )
     openai_tts_group.add_argument(
         "--openai_job_download_url_path",
-        default="download_url",
+        default=None,
         help="Dot path to download URL in polling response JSON (default: download_url).",
     )
     openai_tts_group.add_argument(
         "--openai_job_done_values",
-        default="done,completed,succeeded,success",
+        default=None,
         help="Comma-separated status values that mean the polling job is complete.",
     )
     openai_tts_group.add_argument(
         "--openai_job_failed_values",
-        default="failed,error,cancelled",
+        default=None,
         help="Comma-separated status values that mean the polling job has failed.",
     )
     openai_tts_group.add_argument(
         "--openai_poll_interval",
-        default=120,
+        default=None,
         type=int,
-        help="Polling interval in seconds for job-based OpenAI-compatible TTS servers.",
+        help="Polling interval in seconds for job-based OpenAI-compatible TTS servers. Default: 120.",
     )
     openai_tts_group.add_argument(
         "--openai_poll_timeout",
-        default=14400,
+        default=None,
         type=int,
-        help="Maximum time in seconds to wait for a polling TTS job before failing.",
+        help="Maximum time in seconds to wait for a polling TTS job before failing. Default: 14400.",
     )
     openai_tts_group.add_argument(
         "--openai_poll_request_timeout",
-        default=120,
+        default=None,
         type=int,
-        help="HTTP timeout in seconds for each individual polling or download request (default: 120).",
+        help="HTTP timeout in seconds for each individual polling or download request. Default: 120.",
     )
     openai_tts_group.add_argument(
         "--openai_poll_max_errors",
-        default=10,
+        default=None,
         type=int,
-        help="How many consecutive transient polling/download HTTP errors to tolerate before failing (default: 10).",
+        help="How many consecutive transient polling/download HTTP errors to tolerate before failing. Default: 10.",
     )
 
     normalizer_group = parser.add_argument_group(title="normalizer specific")
     normalizer_group.add_argument(
         "--normalize",
-        action="store_true",
+        action="store_const",
+        const=True,
+        default=None,
         help="Normalize chapter text before sending it to TTS.",
     )
     normalizer_group.add_argument(
@@ -310,7 +314,7 @@ def handle_args():
     normalizer_group.add_argument(
         "--normalize_provider",
         choices=get_supported_normalizers(),
-        default="openai",
+        default=None,
         help=(
             "Single-step normalizer shorthand when --normalize_steps is not set (default: openai). "
             "Superseded by --normalize_steps when both are given."
@@ -565,6 +569,14 @@ def handle_args():
     # Apply defaults for args that weren't set via CLI or INI
     if not getattr(args, "tts", None):
         args.tts = get_supported_tts_providers()[0]  # default: azure
+    if not getattr(args, "normalize", None):
+        args.normalize = False
+    if not getattr(args, "openai_enable_polling", None):
+        args.openai_enable_polling = False
+    if getattr(args, "openai_max_chars", None) is None:
+        args.openai_max_chars = 1800
+    if not getattr(args, "normalize_provider", None):
+        args.normalize_provider = "openai"
 
     return GeneralConfig(args)
 
