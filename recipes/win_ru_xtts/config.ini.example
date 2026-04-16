@@ -1,0 +1,53 @@
+; recipes/win_ru_xtts/config.ini.example
+;
+; Windows recipe: Russian XTTS v2 via local xtts-api-server
+; ==========================================================
+; Copy this file to:
+;   a) ~/.config/epub_to_audiobook/config.ini   ← your personal machine defaults
+;   b) <book folder>/<BookTitle>.ini             ← per-book overrides
+;
+; Then run simply:
+;   .venv\Scripts\python main.py "D:\books\MyBook.epub" --mode all
+;
+; No wrapper script needed.
+
+[general]
+language = ru-RU
+no_prompt = true
+chapter_mode = toc_sections
+mode = all
+
+[tts]
+tts = openai
+voice_name = reference_long
+output_format = wav
+model_name = tts_models/multilingual/multi-dataset/xtts_v2
+
+[tts.openai]
+openai_base_url = http://127.0.0.1:8020
+openai_max_chars = 0
+openai_enable_polling = true
+openai_submit_url = /v1/tts/jobs
+openai_status_url_template = /v1/tts/jobs/{job_id}
+openai_download_url_template = /v1/tts/jobs/{job_id}/audio
+openai_job_id_path = id
+openai_job_status_path = status
+openai_poll_interval = 5
+openai_poll_timeout = 14400
+
+[normalize]
+normalize = true
+normalize_steps = simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,proper_nouns_pronunciation_ru,tts_safe_split
+normalize_model = gpt-4o-mini
+; normalize_base_url = http://127.0.0.1:1234/v1   ; uncomment if using local LLM
+; normalize_api_key =                               ; or set OPENAI_API_KEY env var
+normalize_max_chars = 6000
+normalize_tts_safe_max_chars = 180
+; normalize_system_prompt_file = C:\path\to\ru_prompt.txt
+
+[m4b]
+package_m4b = true
+chunked_audio = true
+m4b_bitrate = 64k
+; ffmpeg_path = C:\ffmpeg\bin\ffmpeg.exe
+

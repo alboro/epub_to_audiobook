@@ -145,6 +145,76 @@ def load_ini(path: str | Path) -> Dict[str, Any]:
     return result
 
 
+def _project_root() -> Path:
+    """Return the project root directory (two levels up from this file)."""
+    return Path(__file__).resolve().parents[2]
+
+
+def discover_ini_files(input_file: Optional[str] = None, explicit_config: Optional[str] = None) -> list:
+    """Return ordered list of INI file paths to load (lowest to highest priority).
+
+    Priority order (later overrides earlier):
+      1. Global user config:   ~/.config/epub_to_audiobook/config.ini
+      2. Project-local config: <project_root>/config.local.ini
+      3. Per-book config:      <book_dir>/<book_stem>.ini  (or audiobook.ini as fallback)
+      4. Explicit --config:    the path passed on CLI
+
+    CLI args always win over all INI files (handled by merge_ini_into_args).
+    """
+    files = []
+
+    # 1. Global user config
+    global_cfg = Path.home() / ".config" / "epub_to_audiobook" / "config.ini"
+    if global_cfg.is_file():
+        files.append(global_cfg)
+        logger.debug("Auto-loaded global config: %s", global_cfg)
+
+    # 2. Project-local config (next to main.py, gitignored)
+    project_local = _project_root() / "config.local.ini"
+    if project_local.is_file():
+        files.append(project_local)
+        logger.debug("Auto-loaded project-local config: %s", project_local)
+
+    # 2. Per-book config (next to the input file)
+    if input_file:
+        book_path = Path(input_file).expanduser().resolve()
+        book_dir = book_path.parent
+        candidates = [
+            book_dir / (book_path.stem + ".ini"),
+            book_dir / "audiobook.ini",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                files.append(candidate)
+                logger.debug("Auto-loaded per-book config: %s", candidate)
+                break  # only the first match
+
+    # 3. Explicit --config
+    if explicit_config:
+        cfg_path = Path(explicit_config)
+        if cfg_path.is_dir() and input_file:
+            cfg_path = cfg_path / (Path(input_file).stem + ".ini")
+        if cfg_path.is_file():
+            files.append(cfg_path)
+        else:
+            import sys
+            print(f"ERROR: Config file not found: {cfg_path}", file=sys.stderr)
+            sys.exit(1)
+
+    return files
+
+
+def load_merged_ini(input_file: Optional[str] = None, explicit_config: Optional[str] = None) -> Dict[str, Any]:
+    """Load and merge all discovered INI files into one flat dict.
+
+    Later files override earlier ones.
+    """
+    merged: Dict[str, Any] = {}
+    for path in discover_ini_files(input_file, explicit_config):
+        merged.update(load_ini(path))
+    return merged
+
+
 def save_ini(path: str | Path, config, *, include_paths: bool = True) -> None:
     """Write a GeneralConfig snapshot to an INI file.
 

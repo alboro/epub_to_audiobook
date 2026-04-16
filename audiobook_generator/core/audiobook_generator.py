@@ -255,61 +255,140 @@ class AudiobookGenerator:
                 return path
         return None
 
+    def _detect_audio_folder(self) -> str:
+        """Return the folder that contains chapter audio files for packaging.
+
+        Priority:
+        1. ``config.audio_folder`` — explicit CLI override.
+        2. Latest ``wav/NNN/`` subdirectory inside ``output_folder``.
+        3. ``output_folder`` root itself.
+        """
+        if getattr(self.config, "audio_folder", None):
+            return self.config.audio_folder
+
+        wav_base = Path(self.config.output_folder) / "wav"
+        if wav_base.is_dir():
+            run_dirs = sorted(
+                p for p in wav_base.iterdir()
+                if p.is_dir() and p.name.isdigit()
+            )
+            if run_dirs:
+                found = str(run_dirs[-1])
+                logger.info("Auto-detected audio folder: %s", found)
+                return found
+
+        return self.config.output_folder
+
+    @staticmethod
+    def _scan_audio_files(audio_folder: str):
+        """Return (file_path, chapter_title) pairs for all audio files in *audio_folder*,
+        sorted by filename. Derives chapter titles from filenames."""
+        result = []
+        ext_set = set(_AUDIO_EXTENSIONS)
+        for entry in sorted(os.scandir(audio_folder), key=lambda e: e.name):
+            if not entry.is_file():
+                continue
+            _, ext = os.path.splitext(entry.name)
+            if ext.lower() not in ext_set:
+                continue
+            # Derive a human-readable title: strip leading NNNN_, strip extension, replace _ with space
+            stem = os.path.splitext(entry.name)[0]
+            import re as _re
+            title = _re.sub(r"^\d+_", "", stem).replace("_", " ")
+            result.append((entry.path, title))
+        return result
+
+    def _merge_chunks_into_chapters(self, audio_folder: str) -> list[tuple[str, str]]:
+        """If no chapter audio files exist, scan for chunked audio and merge by chapter.
+
+        Returns list of (chapter_file_path, chapter_title) for merged chapters.
+        """
+        chunks_dir = os.path.join(audio_folder, "chunks")
+        if not os.path.isdir(chunks_dir):
+            return []
+
+        logger.info("No chapter audio files found; scanning for audio chunks in %s", chunks_dir)
+
+        merged = []
+        for chapter_dir in sorted(os.scandir(chunks_dir), key=lambda e: e.name):
+            if not chapter_dir.is_dir():
+                continue
+
+            chapter_key = chapter_dir.name
+            chunk_files = []
+            for chunk_entry in sorted(os.scandir(chapter_dir.path), key=lambda e: e.name):
+                if chunk_entry.is_file():
+                    _, ext = os.path.splitext(chunk_entry.name)
+                    if ext.lower() in set(_AUDIO_EXTENSIONS):
+                        chunk_files.append(chunk_entry.path)
+
+            if not chunk_files:
+                continue
+
+            # Merge chunks into a chapter file
+            chapter_file = os.path.join(audio_folder, f"{chapter_key}.wav")  # Assume wav for merged
+            try:
+                from audiobook_generator.core.chunked_audio_generator import _merge_audio_files
+                _merge_audio_files(chunk_files, chapter_file)
+                # Derive title from chapter_key: replace _ with space, strip numbers if any
+                title = chapter_key.replace("_", " ")
+                import re as _re
+                title = _re.sub(r"^\d+ ", "", title)
+                merged.append((chapter_file, title))
+                logger.info("Merged %d chunks into chapter: %s", len(chunk_files), chapter_file)
+            except Exception as exc:
+                logger.warning("Failed to merge chunks for %s: %s", chapter_key, exc)
+
+        return merged
+
     def _run_package_only(self):
         """Package existing chapter audio files into m4b without running TTS."""
-        logger.info("Package mode: packaging existing audio files from %s", self.config.output_folder)
-        book_parser = get_book_parser(self.config)
         os.makedirs(self.config.output_folder, exist_ok=True)
 
-        # Use a generic break string — we only need chapter list and metadata, not TTS.
-        chapters = book_parser.get_chapters(break_string="")
-        chapters = [(title, text) for title, text in chapters if text.strip()]
+        audio_folder = self._detect_audio_folder()
+        logger.info("Package mode: scanning audio files in %s", audio_folder)
 
-        if self.config.chapter_end == -1 or self.config.chapter_end is None:
-            self.config.chapter_end = len(chapters)
-        if self.config.chapter_start is None:
-            self.config.chapter_start = 1
-
-        chapters_to_package = chapters[self.config.chapter_start - 1: self.config.chapter_end]
-
-        chapter_files = []
-        chapter_titles = []
-        missing = []
-
-        for idx, (title, _text) in enumerate(chapters_to_package, start=self.config.chapter_start):
-            path = self._find_audio_file(self.config.output_folder, idx, title)
-            if path:
-                chapter_files.append(path)
-                chapter_titles.append(title)
-            else:
-                missing.append((idx, title))
-
-        if missing:
-            logger.warning("Audio files not found for %d chapter(s):", len(missing))
-            for idx, title in missing:
-                logger.warning("  Chapter %d: %s", idx, title)
-
-        if not chapter_files:
-            logger.error("No audio files found in %s. Run 'audio' mode first.", self.config.output_folder)
+        if not os.path.isdir(audio_folder):
+            logger.error("Audio folder does not exist: %s", audio_folder)
             return
 
-        if len(missing) > 0:
-            logger.warning(
-                "Packaging %d of %d chapters (missing audio skipped).",
-                len(chapter_files),
-                len(chapters_to_package),
-            )
+        scanned = self._scan_audio_files(audio_folder)
+        if not scanned:
+            # Try to merge chunks into chapters
+            scanned = self._merge_chunks_into_chapters(audio_folder)
+            if not scanned:
+                logger.error(
+                    "No audio files or chunks found in %s. Run 'audio' mode first, "
+                    "or pass --audio_folder to specify the folder explicitly.",
+                    audio_folder,
+                )
+                return
+
+        chapter_files = [p for p, _ in scanned]
+        chapter_titles = [t for _, t in scanned]
+        logger.info("Found %d audio file(s) to package.", len(chapter_files))
+
+        # Book metadata — only read epub/fb2 if the input file is available.
+        book_title = book_author = book_cover = None
+        if self.config.input_file and os.path.isfile(self.config.input_file):
+            try:
+                book_parser = get_book_parser(self.config)
+                book_title = book_parser.get_book_title()
+                book_author = book_parser.get_book_author()
+                book_cover = book_parser.get_book_cover()
+            except Exception as exc:
+                logger.warning("Could not read book metadata: %s", exc)
 
         m4b_path = package_m4b(
             chapter_files=chapter_files,
             chapter_titles=chapter_titles,
-            book_title=book_parser.get_book_title(),
-            book_author=book_parser.get_book_author(),
+            book_title=book_title or Path(self.config.input_file or "book").stem,
+            book_author=book_author or "",
             output_dir=self.config.output_folder,
             ffmpeg_path=self.config.ffmpeg_path,
             output_filename=self.config.m4b_filename,
             bitrate=self.config.m4b_bitrate,
-            cover=book_parser.get_book_cover(),
+            cover=book_cover,
         )
         logger.info("✅ Packaged m4b audiobook: %s", m4b_path)
 

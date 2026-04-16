@@ -41,6 +41,11 @@ piper_models/*
 # Env files
 .env
 
+# Local INI configs (per-machine / per-book overrides; not committed)
+# Exception: *.example.ini files in the repo are templates and ARE committed.
+*.ini
+!*.example.ini
+
 # Temp Test files
 test.py
 

@@ -178,6 +178,15 @@ def handle_args():
         ),
     )
     parser.add_argument(
+        "--audio_folder",
+        default=None,
+        help=(
+            "Explicit folder containing chapter audio files for --mode package. "
+            "If not set, the tool auto-detects the latest wav/NNN/ subdirectory "
+            "inside output_folder, or falls back to output_folder itself."
+        ),
+    )
+    parser.add_argument(
         "--m4b_filename",
         help="Optional output filename for the packaged m4b file.",
     )
@@ -558,22 +567,17 @@ def handle_args():
 
     args = parser.parse_args()
 
-    # Merge INI config if --config was provided (CLI args take priority).
-    if args.config:
-        from audiobook_generator.config.ini_config_manager import load_ini, merge_ini_into_args
-        from pathlib import Path as _Path
-        ini_path = _Path(args.config)
-        if ini_path.is_dir():
-            # Guess the INI filename from the book name
-            if args.input_file:
-                ini_path = ini_path / (_Path(args.input_file).stem + ".ini")
-        if ini_path.is_file():
-            ini_values = load_ini(ini_path)
-            merge_ini_into_args(args, ini_values)
-        else:
-            import sys as _sys
-            print(f"ERROR: Config file not found: {ini_path}", file=_sys.stderr)
-            _sys.exit(1)
+    # Auto-discover and merge INI configs (CLI args always take priority).
+    # Order: global ~/.config/epub_to_audiobook/config.ini
+    #        → per-book <book_dir>/<book_stem>.ini
+    #        → explicit --config
+    from audiobook_generator.config.ini_config_manager import load_merged_ini, merge_ini_into_args
+    ini_values = load_merged_ini(
+        input_file=getattr(args, "input_file", None),
+        explicit_config=getattr(args, "config", None),
+    )
+    if ini_values:
+        merge_ini_into_args(args, ini_values)
 
     return GeneralConfig(args)
 

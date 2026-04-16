@@ -24,6 +24,7 @@ class GeneralConfig:
         self.use_pydub_merge = getattr(args, 'use_pydub_merge', None)
         self.package_m4b = getattr(args, 'package_m4b', None)
         self.chunked_audio = getattr(args, 'chunked_audio', None)
+        self.audio_folder = getattr(args, 'audio_folder', None)
         self.m4b_filename = getattr(args, 'm4b_filename', None)
         self.m4b_bitrate = getattr(args, 'm4b_bitrate', None)
         self.ffmpeg_path = getattr(args, 'ffmpeg_path', None)
