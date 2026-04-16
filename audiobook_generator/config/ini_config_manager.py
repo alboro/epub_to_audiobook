@@ -36,6 +36,7 @@ FIELD_SECTIONS: Dict[str, str] = {
     "search_and_replace_file": "general",
     "output_text": "general",
     "prepared_text_folder": "general",
+    "force_new_run": "general",
     # [tts] --------------------------------------------------------------------
     "tts": "tts",
     "voice_name": "tts",
@@ -109,6 +110,7 @@ FIELD_SECTIONS: Dict[str, str] = {
     "normalize_tsnorm_stress_monosyllabic": "normalize",
     "normalize_tsnorm_min_word_length": "normalize",
     "normalize_stress_paradox_words": "normalize",
+    "normalize_log_changes": "normalize",
     # [m4b] --------------------------------------------------------------------
     "package_m4b": "m4b",
     "chunked_audio": "m4b",
@@ -119,8 +121,8 @@ FIELD_SECTIONS: Dict[str, str] = {
 
 # Fields that are boolean flags (no value, just presence).
 BOOL_FIELDS = {
-    "no_prompt", "use_pydub_merge", "output_text",
-    "normalize",
+    "no_prompt", "use_pydub_merge", "output_text", "force_new_run",
+    "normalize", "normalize_log_changes",
     "openai_enable_polling",
     "normalize_tsnorm_stress_yo", "normalize_tsnorm_stress_monosyllabic",
     "qwen_stream", "package_m4b",
@@ -164,13 +166,13 @@ def discover_ini_files(input_file: Optional[str] = None, explicit_config: Option
     global_cfg = Path.home() / ".config" / "epub_to_audiobook" / "config.ini"
     if global_cfg.is_file():
         files.append(global_cfg)
-        logger.debug("Auto-loaded global config: %s", global_cfg)
+        logger.info("Auto-loaded global config: %s", global_cfg)
 
     # 2. Project-local config (next to main.py, gitignored)
     project_local = _project_root() / "config.local.ini"
     if project_local.is_file():
         files.append(project_local)
-        logger.debug("Auto-loaded project-local config: %s", project_local)
+        logger.info("Auto-loaded project-local config: %s", project_local)
 
     # 2. Per-book config (next to the input file)
     if input_file:
@@ -183,7 +185,7 @@ def discover_ini_files(input_file: Optional[str] = None, explicit_config: Option
         for candidate in candidates:
             if candidate.is_file():
                 files.append(candidate)
-                logger.debug("Auto-loaded per-book config: %s", candidate)
+                logger.info("Auto-loaded per-book config: %s", candidate)
                 break  # only the first match
 
     # 3. Explicit --config

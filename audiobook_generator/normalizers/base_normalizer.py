@@ -44,6 +44,11 @@ class BaseNormalizer:
     def get_step_name(self) -> str:
         return getattr(self, "STEP_NAME", self.__class__.__name__.lower())
 
+    def should_log_changes(self) -> bool:
+        """Check if change logging is enabled for this normalizer step."""
+        # Default to False for performance unless explicitly enabled
+        return getattr(self.config, 'normalize_log_changes', False)
+
     def get_resume_signature(self) -> dict:
         return {
             "step_name": self.get_step_name(),

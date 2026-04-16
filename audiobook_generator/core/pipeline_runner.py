@@ -124,14 +124,16 @@ class NormalizationPipelineRunner:
                 normalized = step_normalizer.normalize(input_text, chapter_title=chapter_title)
 
             output_path.write_text(normalized, encoding="utf-8", newline="\n")
-            self._write_named_artifacts(
-                step_dir,
-                self._build_change_artifacts(
-                    input_text=input_text,
-                    output_text=normalized,
-                    title=f"{step_name} changes",
-                ),
-            )
+            # Only create change artifacts if logging is enabled for this normalizer
+            if step_normalizer.should_log_changes():
+                self._write_named_artifacts(
+                    step_dir,
+                    self._build_change_artifacts(
+                        input_text=input_text,
+                        output_text=normalized,
+                        title=f"{step_name} changes",
+                    ),
+                )
             self._write_named_artifacts(
                 step_dir,
                 step_normalizer.get_post_step_artifacts(
@@ -245,14 +247,16 @@ class NormalizationPipelineRunner:
                     unit_count=len(units),
                 )
                 unit_output_path.write_text(unit_result, encoding="utf-8", newline="\n")
-                self._write_named_artifacts(
-                    unit_dir,
-                    self._build_change_artifacts(
-                        input_text=unit,
-                        output_text=unit_result,
-                        title=f"{step_name} chunk {unit_index} changes",
-                    ),
-                )
+                # Only create change artifacts if logging is enabled for this normalizer
+                if step_normalizer.should_log_changes():
+                    self._write_named_artifacts(
+                        unit_dir,
+                        self._build_change_artifacts(
+                            input_text=unit,
+                            output_text=unit_result,
+                            title=f"{step_name} chunk {unit_index} changes",
+                        ),
+                    )
                 self.store.upsert_unit(
                     chapter_key=self.chapter_key,
                     step_index=step_index,

@@ -47,7 +47,7 @@ def handle_args():
     parser.add_argument(
         "--tts",
         choices=get_supported_tts_providers(),
-        default=get_supported_tts_providers()[0],
+        default=None,
         help="Choose TTS provider (default: azure). azure: Azure Cognitive Services, openai: OpenAI TTS API. When using azure, environment variables MS_TTS_KEY and MS_TTS_REGION must be set. When using openai, environment variable OPENAI_API_KEY must be set.",
     )
     parser.add_argument(
@@ -144,6 +144,11 @@ def handle_args():
         "--package_m4b",
         action="store_true",
         help="Package generated chapter audio files into a single m4b audiobook with chapter markers.",
+    )
+    parser.add_argument(
+        "--force_new_run",
+        action="store_true",
+        help="Force creating a new run directory (002, 003, etc.) instead of attempting to resume previous incomplete work.",
     )
     parser.add_argument(
         "--chunked_audio",
@@ -556,6 +561,10 @@ def handle_args():
     )
     if ini_values:
         merge_ini_into_args(args, ini_values)
+
+    # Apply defaults for args that weren't set via CLI or INI
+    if not getattr(args, "tts", None):
+        args.tts = get_supported_tts_providers()[0]  # default: azure
 
     return GeneralConfig(args)
 

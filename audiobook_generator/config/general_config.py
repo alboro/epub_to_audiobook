@@ -20,6 +20,7 @@ class GeneralConfig:
         self.no_prompt = getattr(args, 'no_prompt', None)
         self.worker_count = getattr(args, 'worker_count', None)
         self.use_pydub_merge = getattr(args, 'use_pydub_merge', None)
+        self.force_new_run = getattr(args, 'force_new_run', None)
         self.package_m4b = getattr(args, 'package_m4b', None)
         self.chunked_audio = getattr(args, 'chunked_audio', None)
         self.audio_folder = getattr(args, 'audio_folder', None)

@@ -75,7 +75,18 @@ def process_ui_form(input_file, output_dir, worker_count, log_level, output_text
                     gemini_api_key, gemini_model, gemini_voice, gemini_output_format, gemini_temperature, gemini_speaker_map,
                     kokoro_base_url, kokoro_voice, kokoro_model, kokoro_output_format, kokoro_speed, kokoro_volume_multiplier):
 
-    config = GeneralConfig(None)
+    # Load merged ini first to get config.local.ini values
+    from audiobook_generator.config.ini_config_manager import load_merged_ini, merge_ini_into_args
+    import argparse
+
+    # Create a temporary args object to load ini values into
+    temp_args = argparse.Namespace()
+    input_file_path = input_file.name if hasattr(input_file, 'name') else input_file
+    ini_values = load_merged_ini(input_file=input_file_path)
+    merge_ini_into_args(temp_args, ini_values)
+
+    config = GeneralConfig(temp_args)
+    # Override with UI form values (UI values take priority over ini values)
     config.input_file = input_file.name if hasattr(input_file, 'name') else input_file
     config.output_folder = output_dir
     config.output_text = output_text

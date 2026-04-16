@@ -102,18 +102,14 @@ class AudiobookGenerator:
         )
 
     def _save_ini_snapshot(self, run_dir: str) -> None:
-        """Write a config snapshot INI into the root output folder and the run folder."""
+        """Write a config snapshot INI into the root output folder as ini.backup."""
         from pathlib import Path
         from audiobook_generator.config.ini_config_manager import save_ini
         book_stem = Path(self.config.input_file or "book").stem
-        # Root snapshot (always updated to reflect the latest run)
-        root_ini = Path(self.config.output_folder) / f"{book_stem}.ini"
+        # Only save to root as ini.backup (no longer save duplicate in run folder)
+        root_ini = Path(self.config.output_folder) / f"{book_stem}.ini.backup"
         save_ini(root_ini, self.config)
-        # Run-specific snapshot
-        if run_dir:
-            run_ini = Path(run_dir) / f"{book_stem}.ini"
-            save_ini(run_ini, self.config)
-            logger.debug("Run config snapshot: %s", run_ini)
+        logger.debug("Config snapshot: %s", root_ini)
 
     def _copy_input_book(self):
         if not self.config.input_file or not self.config.output_folder:
@@ -506,6 +502,41 @@ class AudiobookGenerator:
         idx, title, text, book_parser = args
         return idx, self.process_chapter(idx, title, text, book_parser)
 
+    def _can_resume_latest_run(self, kind: str) -> tuple[str | None, bool]:
+        """Check if the latest run can be resumed.
+
+        Returns (run_index, can_resume) where:
+        - run_index is the latest run directory (e.g. '001') or None if none exist
+        - can_resume is True if normalization can be resumed from that run
+        """
+        latest_index = self._latest_run_index(kind)
+        if not latest_index:
+            return None, False
+
+        # Check if there's a normalization progress database for this run
+        from pathlib import Path
+        state_path = Path(self.config.output_folder) / kind / latest_index / "_state" / "normalization_progress.sqlite3"
+
+        if not state_path.exists():
+            # No progress database - cannot resume
+            return latest_index, False
+
+        # Check if there are any incomplete normalization steps
+        try:
+            from audiobook_generator.core.progress_store import NormalizationProgressStore
+            store = NormalizationProgressStore(state_path)
+
+            # Simple heuristic: if the database exists and has data, assume we can resume
+            # More sophisticated logic could check for specific incomplete states
+            with store._connect() as connection:
+                result = connection.execute("SELECT COUNT(*) FROM normalization_steps").fetchone()
+                has_progress = result and result[0] > 0
+
+            return latest_index, has_progress
+        except Exception as e:
+            logger.warning(f"Cannot check resume state for {state_path}: {e}")
+            return latest_index, False
+
     def run(self):
         try:
             logger.info("Starting audiobook generation...")
@@ -539,7 +570,22 @@ class AudiobookGenerator:
             # Determine run index for the structured text/ and wav/ layout.
             # Only applies when mode is explicitly set (not legacy mode=None).
             if mode in ('prepare', 'all'):
-                run_index = self._next_run_index("text")
+                if self.config.force_new_run:
+                    # Force creating new run directory
+                    run_index = self._next_run_index("text")
+                    logger.info("Force new run: created text/%s", run_index)
+                else:
+                    # Check if we can resume latest run
+                    latest_index, can_resume = self._can_resume_latest_run("text")
+                    if can_resume:
+                        run_index = latest_index
+                        logger.info("Resuming previous run: text/%s", run_index)
+                    else:
+                        run_index = self._next_run_index("text")
+                        if latest_index:
+                            logger.info("Previous run text/%s is complete, starting new run: text/%s", latest_index, run_index)
+                        else:
+                            logger.info("Starting first run: text/%s", run_index)
             elif mode == 'audio':
                 # Use the same index as the latest text run.
                 latest_text = self._latest_run_index("text")
@@ -571,7 +617,8 @@ class AudiobookGenerator:
             book_parser = get_book_parser(self.config)
             tts_provider = get_tts_provider(self.config)
 
-            self._copy_input_book()
+            # Skip copying input book to _source folder
+            # self._copy_input_book()
             if self.config.prepared_text_folder and not os.path.isdir(self.config.prepared_text_folder):
                 raise FileNotFoundError(
                     f"Prepared text folder not found: {self.config.prepared_text_folder}"
