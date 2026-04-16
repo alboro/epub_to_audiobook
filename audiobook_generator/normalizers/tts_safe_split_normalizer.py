@@ -14,6 +14,8 @@ DEFAULT_SAFE_MAX_CHARS = 180
 MIN_SPLIT_FRACTION = 0.45
 MIN_SPLIT_FRAGMENT_CHARS = 24
 MIN_SPLIT_FRAGMENT_WORDS = 2
+# Sentences shorter than this will be merged with the next sentence to avoid TTS instability
+MIN_TTS_SAFE_CHARS = 12
 LEFT_TRIM_CHARS = " \t\r\n,;:-–—"
 RIGHT_TRIM_CHARS = " \t\r\n,;:-–—"
 SENTENCE_END_CHARS = ".!?"
@@ -86,7 +88,23 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
             safe_sentences.extend(split_parts)
             inserted_splits += max(0, len(split_parts) - 1)
 
-        return " ".join(safe_sentences).strip(), len(safe_sentences), inserted_splits
+        # Merge very short sentences with the next one to avoid TTS instability
+        merged_sentences = []
+        i = 0
+        while i < len(safe_sentences):
+            current = safe_sentences[i]
+            if len(current) < MIN_TTS_SAFE_CHARS and i + 1 < len(safe_sentences):
+                # Merge current with next
+                next_sent = safe_sentences[i + 1]
+                # Remove trailing period from current before merging
+                base = current.rstrip(".!?").rstrip()
+                merged_sentences.append(f"{base} {next_sent}")
+                i += 2
+            else:
+                merged_sentences.append(current)
+                i += 1
+
+        return " ".join(merged_sentences).strip(), len(merged_sentences), inserted_splits
 
     def _split_long_sentence(self, sentence: str) -> list[str]:
         pending = [sentence.strip()]

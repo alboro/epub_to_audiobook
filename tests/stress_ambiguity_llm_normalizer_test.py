@@ -62,8 +62,6 @@ def make_config(**overrides) -> GeneralConfig:
         newline_mode="double",
         chapter_start=1,
         chapter_end=-1,
-        remove_endnotes=False,
-        remove_reference_numbers=False,
         search_and_replace_file="",
         tts="openai",
         language="ru-RU",

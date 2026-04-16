@@ -6,15 +6,21 @@ NORMALIZER_OPENAI = "openai"
 NORMALIZER_LLM = "llm"
 NORMALIZER_SIMPLE_SYMBOLS = "simple_symbols"
 NORMALIZER_TTS_SAFE_SPLIT = "tts_safe_split"
-NORMALIZER_NUMBERS_RU = "numbers_ru"
-NORMALIZER_INITIALS_RU = "initials_ru"
 NORMALIZER_TTS_PRONUNCIATION_OVERRIDES = "tts_pronunciation_overrides"
-NORMALIZER_STRESS_WORDS_RU = "stress_words_ru"
-NORMALIZER_STRESS_AMBIGUITY_LLM = "stress_ambiguity_llm"
-NORMALIZER_TSNORM_RU = "tsnorm_ru"
-NORMALIZER_PROPER_NOUNS_RU = "proper_nouns_ru"
-NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU = "proper_nouns_pronunciation_ru"
-NORMALIZER_ABBREVIATIONS_RU = "abbreviations_ru"
+
+# Russian-language normalizers
+NORMALIZER_NUMBERS_RU = "ru_numbers"
+NORMALIZER_INITIALS_RU = "ru_initials"
+NORMALIZER_STRESS_WORDS_RU = "ru_stress_words"
+NORMALIZER_STRESS_AMBIGUITY_LLM = "ru_llm_stress_ambiguity"
+NORMALIZER_TSNORM_RU = "ru_tsnorm"
+NORMALIZER_PROPER_NOUNS_RU = "ru_proper_nouns"
+NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU = "ru_llm_proper_nouns"
+NORMALIZER_ABBREVIATIONS_RU = "ru_abbreviations"
+
+# Text cleanup normalizers
+NORMALIZER_REMOVE_ENDNOTES = "remove_endnotes"
+NORMALIZER_REMOVE_REFERENCE_NUMBERS = "remove_reference_numbers"
 
 
 class BaseNormalizer:
@@ -110,6 +116,8 @@ def get_supported_normalizers() -> List[str]:
     return [
         NORMALIZER_OPENAI,
         NORMALIZER_SIMPLE_SYMBOLS,
+        NORMALIZER_REMOVE_ENDNOTES,
+        NORMALIZER_REMOVE_REFERENCE_NUMBERS,
         NORMALIZER_INITIALS_RU,
         NORMALIZER_ABBREVIATIONS_RU,
         NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
@@ -123,7 +131,7 @@ def get_supported_normalizers() -> List[str]:
     ]
 
 
-def get_normalizer(config: GeneralConfig) -> BaseNormalizer:
+def get_normalizer(config: GeneralConfig) -> "BaseNormalizer":
     if not config.normalize:
         raise ValueError("Text normalization is disabled")
     steps = _resolve_normalizer_steps(config)
@@ -194,9 +202,11 @@ def normalize_step_name(step: str) -> str:
         NORMALIZER_SIMPLE_SYMBOLS: NORMALIZER_SIMPLE_SYMBOLS,
         "symbols": NORMALIZER_SIMPLE_SYMBOLS,
         "safe_symbols": NORMALIZER_SIMPLE_SYMBOLS,
+        # ru_initials
         NORMALIZER_INITIALS_RU: NORMALIZER_INITIALS_RU,
         "initials": NORMALIZER_INITIALS_RU,
-        "ru_initials": NORMALIZER_INITIALS_RU,
+        "initials_ru": NORMALIZER_INITIALS_RU,
+        # tts_pronunciation_overrides
         NORMALIZER_TTS_PRONUNCIATION_OVERRIDES: NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
         "pronunciation": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
         "pronunciation_exceptions": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
@@ -204,37 +214,54 @@ def normalize_step_name(step: str) -> str:
         "ru_pronunciation": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
         "tts_pronunciation": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
         "tts_pronunciation_overrides_ru": NORMALIZER_TTS_PRONUNCIATION_OVERRIDES,
+        # ru_stress_words
         NORMALIZER_STRESS_WORDS_RU: NORMALIZER_STRESS_WORDS_RU,
         "stress_words": NORMALIZER_STRESS_WORDS_RU,
+        "stress_words_ru": NORMALIZER_STRESS_WORDS_RU,
         "stress_overrides": NORMALIZER_STRESS_WORDS_RU,
+        # ru_llm_stress_ambiguity
         NORMALIZER_STRESS_AMBIGUITY_LLM: NORMALIZER_STRESS_AMBIGUITY_LLM,
         "stress_ambiguity": NORMALIZER_STRESS_AMBIGUITY_LLM,
         "ambiguity_stress": NORMALIZER_STRESS_AMBIGUITY_LLM,
+        "stress_ambiguity_llm": NORMALIZER_STRESS_AMBIGUITY_LLM,
         "stress_ambiguity_llm_ru": NORMALIZER_STRESS_AMBIGUITY_LLM,
+        # ru_proper_nouns
         NORMALIZER_PROPER_NOUNS_RU: NORMALIZER_PROPER_NOUNS_RU,
         "proper_nouns": NORMALIZER_PROPER_NOUNS_RU,
         "proper_names": NORMALIZER_PROPER_NOUNS_RU,
         "stress_names": NORMALIZER_PROPER_NOUNS_RU,
+        "proper_nouns_ru": NORMALIZER_PROPER_NOUNS_RU,
+        # ru_llm_proper_nouns
         NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU: NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU,
         "proper_nouns_llm_ru": NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU,
         "proper_nouns_pronunciation": NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU,
+        "proper_nouns_pronunciation_ru": NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU,
         "proper_names_llm": NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU,
         "proper_name_pronunciation": NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU,
         "name_pronunciation": NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU,
+        # ru_tsnorm
         NORMALIZER_TSNORM_RU: NORMALIZER_TSNORM_RU,
         "tsnorm": NORMALIZER_TSNORM_RU,
+        "tsnorm_ru": NORMALIZER_TSNORM_RU,
         "stress_ru": NORMALIZER_TSNORM_RU,
+        # tts_safe_split
         NORMALIZER_TTS_SAFE_SPLIT: NORMALIZER_TTS_SAFE_SPLIT,
         "safe_split": NORMALIZER_TTS_SAFE_SPLIT,
         "split": NORMALIZER_TTS_SAFE_SPLIT,
         "tts_split": NORMALIZER_TTS_SAFE_SPLIT,
+        # ru_numbers
         NORMALIZER_NUMBERS_RU: NORMALIZER_NUMBERS_RU,
         "numbers": NORMALIZER_NUMBERS_RU,
-        "ru_numbers": NORMALIZER_NUMBERS_RU,
+        "numbers_ru": NORMALIZER_NUMBERS_RU,
+        # ru_abbreviations
         NORMALIZER_ABBREVIATIONS_RU: NORMALIZER_ABBREVIATIONS_RU,
         "abbreviations": NORMALIZER_ABBREVIATIONS_RU,
         "abbrev_ru": NORMALIZER_ABBREVIATIONS_RU,
         "abbreviations_ru": NORMALIZER_ABBREVIATIONS_RU,
+        # cleanup
+        NORMALIZER_REMOVE_ENDNOTES: NORMALIZER_REMOVE_ENDNOTES,
+        NORMALIZER_REMOVE_REFERENCE_NUMBERS: NORMALIZER_REMOVE_REFERENCE_NUMBERS,
+        "ref_numbers": NORMALIZER_REMOVE_REFERENCE_NUMBERS,
     }
     normalized = aliases.get(lowered)
     if not normalized:
@@ -242,60 +269,47 @@ def normalize_step_name(step: str) -> str:
     return normalized
 
 
-def _create_normalizer(step: str, config: GeneralConfig) -> BaseNormalizer:
+def _create_normalizer(step: str, config: GeneralConfig) -> "BaseNormalizer":
     if step == NORMALIZER_OPENAI:
         from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
-
         return OpenAINormalizer(config)
     if step == NORMALIZER_SIMPLE_SYMBOLS:
         from audiobook_generator.normalizers.simple_symbols_normalizer import SimpleSymbolsNormalizer
-
         return SimpleSymbolsNormalizer(config)
     if step == NORMALIZER_INITIALS_RU:
         from audiobook_generator.normalizers.ru_initials_normalizer import InitialsRuNormalizer
-
         return InitialsRuNormalizer(config)
     if step == NORMALIZER_TTS_PRONUNCIATION_OVERRIDES:
-        from audiobook_generator.normalizers.tts_pronunciation_overrides_normalizer import (
-            TTSPronunciationOverridesNormalizer,
-        )
-
+        from audiobook_generator.normalizers.tts_pronunciation_overrides_normalizer import TTSPronunciationOverridesNormalizer
         return TTSPronunciationOverridesNormalizer(config)
     if step == NORMALIZER_STRESS_WORDS_RU:
         from audiobook_generator.normalizers.ru_stress_words_normalizer import StressWordsRuNormalizer
-
         return StressWordsRuNormalizer(config)
     if step == NORMALIZER_STRESS_AMBIGUITY_LLM:
-        from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import (
-            StressAmbiguityLLMNormalizer,
-        )
-
+        from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import StressAmbiguityLLMNormalizer
         return StressAmbiguityLLMNormalizer(config)
     if step == NORMALIZER_PROPER_NOUNS_RU:
         from audiobook_generator.normalizers.ru_proper_nouns_normalizer import ProperNounsRuNormalizer
-
         return ProperNounsRuNormalizer(config)
     if step == NORMALIZER_PROPER_NOUNS_PRONUNCIATION_RU:
-        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import (
-            ProperNounsPronunciationRuNormalizer,
-        )
-
+        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
         return ProperNounsPronunciationRuNormalizer(config)
     if step == NORMALIZER_TSNORM_RU:
         from audiobook_generator.normalizers.ru_tsnorm_normalizer import TSNormRuNormalizer
-
         return TSNormRuNormalizer(config)
     if step == NORMALIZER_TTS_SAFE_SPLIT:
         from audiobook_generator.normalizers.tts_safe_split_normalizer import TTSSafeSplitNormalizer
-
         return TTSSafeSplitNormalizer(config)
     if step == NORMALIZER_NUMBERS_RU:
         from audiobook_generator.normalizers.ru_numbers_normalizer import NumbersRuNormalizer
-
         return NumbersRuNormalizer(config)
     if step == NORMALIZER_ABBREVIATIONS_RU:
         from audiobook_generator.normalizers.ru_abbreviations_normalizer import AbbreviationsRuNormalizer
-
         return AbbreviationsRuNormalizer(config)
+    if step == NORMALIZER_REMOVE_ENDNOTES:
+        from audiobook_generator.normalizers.remove_endnotes_normalizer import RemoveEndnotesNormalizer
+        return RemoveEndnotesNormalizer(config)
+    if step == NORMALIZER_REMOVE_REFERENCE_NUMBERS:
+        from audiobook_generator.normalizers.remove_reference_numbers_normalizer import RemoveReferenceNumbersNormalizer
+        return RemoveReferenceNumbersNormalizer(config)
     raise ValueError(f"Invalid normalizer step: {step}")
-

@@ -98,15 +98,12 @@ def _make_fb2_config(path: str, **kwargs) -> GeneralConfig:
     defaults = dict(
         input_file=path,
         output_folder="output",
-        preview=False,
         output_text=False,
         title_mode="auto",
         log="INFO",
         newline_mode="double",
         chapter_start=1,
         chapter_end=-1,
-        remove_endnotes=False,
-        remove_reference_numbers=False,
         search_and_replace_file=None,
         chapter_mode="documents",
     )
@@ -291,22 +288,13 @@ class TestFb2BookParserChapters(unittest.TestCase):
             Path(path).unlink(missing_ok=True)
 
     def test_remove_endnotes(self):
-        fb2 = """\
-<?xml version="1.0" encoding="utf-8"?>
-<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
-  <description><title-info><book-title>T</book-title></title-info></description>
-  <body>
-    <section><p>Текст предложения.1 Продолжение.</p></section>
-  </body>
-</FictionBook>"""
-        path = _write_tmp_fb2(fb2)
-        try:
-            config = _make_fb2_config(path, remove_endnotes=True)
-            parser = Fb2BookParser(config)
-            chapters = parser.get_chapters("   ")
-            self.assertNotIn("1", chapters[0][1].split("предложения")[1][:2])
-        finally:
-            Path(path).unlink(missing_ok=True)
+        """The remove_endnotes normalizer strips inline footnote numbers."""
+        from audiobook_generator.normalizers.remove_endnotes_normalizer import RemoveEndnotesNormalizer
+        config = _make_fb2_config(":memory:")
+        normalizer = RemoveEndnotesNormalizer(config)
+        text = "Текст предложения.1 Продолжение."
+        result = normalizer.normalize(text)
+        self.assertNotIn("1", result.split("предложения")[1][:2])
 
     def test_poem_verses_are_extracted(self):
         fb2 = """\

@@ -128,11 +128,6 @@ class EpubBookParser(BaseBookParser):
 
         cleaned_text = re.sub(r"\s+", " ", cleaned_text)
 
-        if self.config.remove_endnotes:
-            cleaned_text = re.sub(r'(?<=[\w.,!?;:"\')])\d+', "", cleaned_text)
-
-        if self.config.remove_reference_numbers:
-            cleaned_text = re.sub(r"\[\d+(\.\d+)?\]", "", cleaned_text)
 
         for search_and_replace in search_and_replaces:
             cleaned_text = re.sub(

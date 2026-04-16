@@ -37,7 +37,7 @@ openai_poll_timeout = 14400
 
 [normalize]
 normalize = true
-normalize_steps = simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,simple_symbols,initials_ru,proper_nouns_pronunciation_ru,tts_safe_split
+normalize_steps = simple_symbols,ru_initials,ru_numbers,ru_llm_stress_ambiguity,ru_llm_proper_nouns,tts_safe_split
 normalize_model = gpt-4o-mini
 ; normalize_base_url = http://127.0.0.1:1234/v1   ; uncomment if using local LLM
 ; normalize_api_key =                               ; or set OPENAI_API_KEY env var

@@ -11,11 +11,9 @@ class GeneralConfig:
             _input = Path(self.input_file).expanduser().resolve()
             self.output_folder = str(_input.parent / _input.stem)
 
-        # Generation mode: prepare | audio | package | all (None = legacy, use individual flags)
+        # Generation mode: prepare | audio | package | all
         self.mode = getattr(args, 'mode', None)
-        self.preview = getattr(args, 'preview', None)
         self.output_text = getattr(args, 'output_text', None)
-        self.prepare_text = getattr(args, 'prepare_text', None)
         self.prepared_text_folder = getattr(args, 'prepared_text_folder', None)
         self.log = getattr(args, 'log', None)
         self.log_file = None
@@ -35,8 +33,6 @@ class GeneralConfig:
         self.newline_mode = getattr(args, 'newline_mode', None)
         self.chapter_start = getattr(args, 'chapter_start', None)
         self.chapter_end = getattr(args, 'chapter_end', None)
-        self.remove_endnotes = getattr(args, 'remove_endnotes', None)
-        self.remove_reference_numbers = getattr(args, 'remove_reference_numbers', None)
         self.search_and_replace_file = getattr(args, 'search_and_replace_file', None)
 
         # TTS provider: common arguments
@@ -141,6 +137,9 @@ class GeneralConfig:
         self.current_run_index: str | None = None
         # Path to normalization state SQLite file (overrides default _state/ location).
         self.normalization_state_path: str | None = None
+        # Set by run() based on --mode; not exposed as CLI flags.
+        self.prepare_text: bool = False
+        self.preview: bool = False
 
     def __str__(self):
         return ",\n".join(f"{key}={value}" for key, value in self.__dict__.items())

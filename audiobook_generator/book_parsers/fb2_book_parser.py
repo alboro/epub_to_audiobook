@@ -208,11 +208,6 @@ class Fb2BookParser(BaseBookParser):
         # Collapse stray multiple spaces
         cleaned = re.sub(r" +", " ", cleaned)
 
-        if self.config.remove_endnotes:
-            cleaned = re.sub(r'(?<=[\w.,!?;:"\')])\d+', "", cleaned)
-
-        if self.config.remove_reference_numbers:
-            cleaned = re.sub(r"\[\d+(\.\d+)?\]", "", cleaned)
 
         for sar in search_and_replaces:
             cleaned = re.sub(sar["search"], sar["replace"], cleaned)

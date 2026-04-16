@@ -33,12 +33,8 @@ FIELD_SECTIONS: Dict[str, str] = {
     "newline_mode": "general",
     "title_mode": "general",
     "chapter_mode": "general",
-    "remove_endnotes": "general",
-    "remove_reference_numbers": "general",
     "search_and_replace_file": "general",
-    "preview": "general",
     "output_text": "general",
-    "prepare_text": "general",
     "prepared_text_folder": "general",
     # [tts] --------------------------------------------------------------------
     "tts": "tts",
@@ -122,8 +118,8 @@ FIELD_SECTIONS: Dict[str, str] = {
 
 # Fields that are boolean flags (no value, just presence).
 BOOL_FIELDS = {
-    "no_prompt", "use_pydub_merge", "preview", "output_text", "prepare_text",
-    "normalize", "remove_endnotes", "remove_reference_numbers",
+    "no_prompt", "use_pydub_merge", "output_text",
+    "normalize",
     "openai_enable_polling",
     "normalize_tsnorm_stress_yo", "normalize_tsnorm_stress_monosyllabic",
     "qwen_stream", "package_m4b",

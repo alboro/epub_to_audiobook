@@ -434,9 +434,9 @@ class AudiobookGenerator:
                 artifact_dir,
             )
             final_label = "tts_input"
-            if self.config.prepare_text:
+            if getattr(self.config, 'prepare_text', False):
                 final_label = "prepared_text"
-            elif self.config.preview:
+            elif getattr(self.config, 'preview', False):
                 final_label = "preview_tts_input"
             self._save_chapter_artifacts(
                 idx=idx,

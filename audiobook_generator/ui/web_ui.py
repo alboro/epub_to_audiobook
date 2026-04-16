@@ -63,9 +63,9 @@ def get_piper_supported_speakers_gui(language, voice, quality):
     return gr.Dropdown(speakers_list, value=speakers_list[0], label="Speaker", interactive=True, info="Select the speaker")
 
 
-def process_ui_form(input_file, output_dir, worker_count, log_level, output_text, preview,
-                    mode, normalize_enabled, normalize_steps, normalize_provider,
-                    search_and_replace_file, title_mode, new_line_mode, chapter_start, chapter_end, remove_endnotes, remove_reference_numbers,
+def process_ui_form(input_file, output_dir, worker_count, log_level, output_text,
+                    mode, normalize_steps,
+                    search_and_replace_file, title_mode, new_line_mode, chapter_start, chapter_end,
                     model, voices, speed, openai_output_format, instructions,
                     azure_language, azure_voice, azure_output_format, azure_break_duration,
                     edge_language, edge_voice, edge_output_format, proxy, edge_voice_rate, edge_volume, edge_pitch, edge_break_duration,
@@ -78,7 +78,6 @@ def process_ui_form(input_file, output_dir, worker_count, log_level, output_text
     config = GeneralConfig(None)
     config.input_file = input_file.name if hasattr(input_file, 'name') else input_file
     config.output_folder = output_dir
-    config.preview = preview
     config.output_text = output_text
     config.log = log_level
     config.worker_count = worker_count
@@ -87,17 +86,20 @@ def process_ui_form(input_file, output_dir, worker_count, log_level, output_text
     # Pipeline mode
     config.mode = mode if mode and mode != "legacy" else None
 
-    # Normalization
-    config.normalize = normalize_enabled
-    config.normalize_steps = normalize_steps.strip() if normalize_steps and normalize_steps.strip() else None
-    config.normalize_provider = normalize_provider if normalize_provider else None
+    # Normalization — enabled when any steps are selected
+    if normalize_steps:
+        steps_str = ",".join(normalize_steps) if isinstance(normalize_steps, list) else normalize_steps
+        config.normalize = bool(steps_str.strip())
+        config.normalize_steps = steps_str.strip() if steps_str.strip() else None
+    else:
+        config.normalize = False
+        config.normalize_steps = None
+    config.normalize_provider = None
 
     config.title_mode = title_mode
     config.newline_mode = new_line_mode
     config.chapter_start = chapter_start
     config.chapter_end = chapter_end
-    config.remove_endnotes = remove_endnotes
-    config.remove_reference_numbers = remove_reference_numbers
     config.search_and_replace_file = search_and_replace_file.name if hasattr(search_and_replace_file, 'name') else search_and_replace_file
 
     global selected_tts
@@ -201,14 +203,12 @@ def host_ui(config):
 
             with gr.Column():
                 output_text = gr.Checkbox(label="Enable Output Text", value=False,
-                                      info="Export a plain text file for each chapter.")
-                preview = gr.Checkbox(label="Enable Preview Mode", value=False,
-                                  info="It will not convert the to audio, only prepare chapters and cost. Recommended to toggle on when testing book parsing ***without*** audio generation.")
+                                      info="Export a plain text file for each chapter. Auto-enabled in 'prepare' mode.")
 
         gr.Markdown("---")
         with gr.Row(equal_height=True):
             mode = gr.Dropdown(
-                ["all", "prepare", "audio", "package", "legacy"],
+                ["all", "prepare", "audio", "package"],
                 label="Pipeline Mode",
                 value="all",
                 interactive=True,
@@ -216,30 +216,18 @@ def host_ui(config):
                     "all = normalize + synthesize + package; "
                     "prepare = normalize + write review .txt; "
                     "audio = synthesize only; "
-                    "package = pack existing audio to .m4b; "
-                    "legacy = use individual flags (preview, prepare_text, package_m4b)."
+                    "package = pack existing audio to .m4b."
                 ),
             )
-            with gr.Column():
-                normalize_enabled = gr.Checkbox(
-                    label="Enable Normalization",
-                    value=False,
-                    info="Normalize chapter text before sending it to TTS. Auto-enabled by 'all'/'prepare' mode when steps are set.",
-                )
-                normalize_provider = gr.Dropdown(
-                    get_supported_normalizers(),
-                    label="Normalize Provider (fallback)",
-                    value="openai",
-                    interactive=True,
-                    info="Single-step shorthand used only when Normalize Steps is empty.",
-                )
-            normalize_steps = gr.Textbox(
+            normalize_steps = gr.Dropdown(
+                choices=get_supported_normalizers(),
                 label="Normalize Steps",
-                value="",
+                value=[],
+                multiselect=True,
                 interactive=True,
                 info=(
-                    "Comma-separated normalizer steps. Supersedes Provider when set. "
-                    "Example: simple_symbols,numbers_ru,initials_ru,stress_words_ru,tts_safe_split"
+                    "Select normalizer steps to apply in order. "
+                    "Normalization is active when at least one step is selected."
                 ),
             )
 
@@ -257,11 +245,6 @@ def host_ui(config):
                                       interactive=True, info="Select chapter start index (default: 1)")
             chapter_end = gr.Slider(minimum=-1, maximum=100, step=1, label="Chapter End", value=-1,
                                     interactive=True, info="Chapter end index (default: -1, means last chapter)")
-            with gr.Column():
-                remove_endnotes = gr.Checkbox(label="Remove Endnotes", value=False, info="Remove endnotes from text")
-
-                remove_reference_numbers = gr.Checkbox(label="Remove Reference Numbers", value=False,
-                                                       info="Remove reference numbers from text")
 
 
         gr.Markdown("---")
@@ -500,9 +483,9 @@ def host_ui(config):
             gr.Button("Start", variant="primary").click(
                 fn=process_ui_form,
                 inputs=[
-                    input_file, output_dir, worker_count, log_level, output_text, preview,
-                    mode, normalize_enabled, normalize_steps, normalize_provider,
-                    search_and_replace_file, title_mode, new_line_mode, chapter_start, chapter_end, remove_endnotes, remove_reference_numbers,
+                    input_file, output_dir, worker_count, log_level, output_text,
+                    mode, normalize_steps,
+                    search_and_replace_file, title_mode, new_line_mode, chapter_start, chapter_end,
                     model, voices, speed, openai_output_format, instructions,
                     azure_language, azure_voice, azure_output_format, azure_break_duration,
                     edge_language, edge_voice, edge_output_format, proxy, edge_voice_rate, edge_volume, edge_pitch, edge_break_duration,

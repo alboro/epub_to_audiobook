@@ -6,7 +6,6 @@ def get_azure_config():
     args = MagicMock(
         input_file='examples/The_Life_and_Adventures_of_Robinson_Crusoe.epub',
         output_folder='output',
-        preview=False,
         output_text=False,
         title_mode='auto',
         chapter_mode='documents',
@@ -14,8 +13,6 @@ def get_azure_config():
         newline_mode='double',
         chapter_start=1,
         chapter_end=-1,
-        remove_endnotes=False,
-        remove_reference_numbers=False,
         search_and_replace_file=None,
         tts='azure',
         language='en-US',
@@ -31,7 +28,6 @@ def get_openai_config():
     args = MagicMock(
         input_file='examples/The_Life_and_Adventures_of_Robinson_Crusoe.epub',
         output_folder='output',
-        preview=False,
         output_text=False,
         title_mode='auto',
         chapter_mode='documents',
@@ -39,8 +35,6 @@ def get_openai_config():
         newline_mode='double',
         chapter_start=1,
         chapter_end=-1,
-        remove_endnotes=False,
-        remove_reference_numbers=False,
         search_and_replace_file=None,
         tts='openai',
         language='en-US',

@@ -48,7 +48,6 @@ def make_config(**overrides):
     values = dict(
         input_file="examples/The_Life_and_Adventures_of_Robinson_Crusoe.epub",
         output_folder="output",
-        preview=False,
         output_text=False,
         prepare_text=False,
         prepared_text_folder=None,
@@ -65,8 +64,6 @@ def make_config(**overrides):
         newline_mode="double",
         chapter_start=1,
         chapter_end=-1,
-        remove_endnotes=False,
-        remove_reference_numbers=False,
         search_and_replace_file="",
         tts="openai",
         language="ru-RU",

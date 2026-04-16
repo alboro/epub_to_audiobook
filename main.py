@@ -57,11 +57,6 @@ def handle_args():
         help="Log level (default: INFO), can be DEBUG, INFO, WARNING, ERROR, CRITICAL",
     )
     parser.add_argument(
-        "--preview",
-        action="store_true",
-        help="Enable preview mode. The script will run parsing and normalization, save text artifacts, and stop before sending anything to TTS.",
-    )
-    parser.add_argument(
         "--no_prompt",
         action="store_true",
         help="Don't ask the user if they wish to continue after estimating the cloud cost for TTS. Useful for scripting.",
@@ -112,24 +107,8 @@ def handle_args():
         help="Enable Output Text. This will export a plain text file for each chapter specified and write the files to the output folder specified.",
     )
     parser.add_argument(
-        "--prepare_text",
-        action="store_true",
-        help="[Deprecated: use --mode prepare] Prepare per-chapter UTF-8 text files for review and stop before TTS. If --normalize is enabled, the exported text is normalized first.",
-    )
-    parser.add_argument(
         "--prepared_text_folder",
         help="Use reviewed per-chapter .txt files from this folder as the TTS source instead of the raw text extracted from the EPUB.",
-    )
-    parser.add_argument(
-        "--remove_endnotes",
-        action="store_true",
-        help="This will remove endnote numbers from the end or middle of sentences. This is useful for academic books.",
-    )
-
-    parser.add_argument(
-        "--remove_reference_numbers",
-        action="store_true",
-        help="This will remove reference numbers from the end or middle of sentences (e.g [3] or [12.1]). Also useful for academic books."
     )
 
     parser.add_argument(
@@ -320,8 +299,7 @@ def handle_args():
         help=(
             "Comma-separated normalizer steps to apply in order. "
             "When set, --normalize_provider is ignored. "
-            "Example: simple_symbols,initials_ru,numbers_ru,stress_ambiguity_llm,llm,"
-            "simple_symbols,initials_ru,proper_nouns_pronunciation_ru,tts_safe_split"
+            "Example: simple_symbols,ru_initials,ru_numbers,ru_stress_words,ru_llm_stress_ambiguity,tts_safe_split"
         ),
     )
     normalizer_group.add_argument(

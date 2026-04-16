@@ -401,6 +401,9 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
         if not self.lexicon_db:
             return []
 
+        from audiobook_generator.normalizers.ru_tts_stress_paradox_guard import get_paradox_guard
+        paradox_guard = get_paradox_guard()
+
         candidates: list[StressAmbiguityCandidate] = []
         item_index = 1
         for match in AMBIGUOUS_WORD_PATTERN.finditer(text):
@@ -409,6 +412,12 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
                 continue
 
             key = strip_combining_acute(source_text).lower()
+
+            # Skip words that are known to be mispronounced when stressed
+            if paradox_guard.is_paradox_word(key):
+                logger.debug("Stress paradox guard: skipping '%s'", source_text)
+                continue
+
             lexicon_entries = self._lookup_ambiguous_entries(key)
             if not lexicon_entries:
                 continue
