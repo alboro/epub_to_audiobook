@@ -87,9 +87,9 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
 
     def validate_config(self):
         if not self.has_normalizer_llm():
-            raise ValueError(
-                "stress_ambiguity_llm requires a configured LLM endpoint. "
-                "Set normalize_base_url / normalize_api_key or the matching environment variables."
+            logger.warning(
+                "ru_stress_ambiguity: no LLM configured — step will be skipped. "
+                "Set normalize_base_url / normalize_api_key to enable it."
             )
 
     def supports_chunked_resume(self) -> bool:
@@ -114,6 +114,12 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
         }
 
     def normalize(self, text: str, chapter_title: str = "") -> str:
+        if not self.has_normalizer_llm():
+            logger.info(
+                "ru_stress_ambiguity skipped for chapter '%s': no LLM configured",
+                chapter_title,
+            )
+            return text
         if not is_russian_language(self.config.language):
             logger.info(
                 "stress_ambiguity_llm skipped for chapter '%s' because language is '%s'",
@@ -135,6 +141,11 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
         return self.merge_processed_units(processed_units, chapter_title=chapter_title)
 
     def plan_processing_units(self, text: str, chapter_title: str = "") -> list[str]:
+        if not self.has_normalizer_llm():
+            self._planned_text = text
+            self._planned_candidates = {}
+            self._planned_order = []
+            return []
         if not is_russian_language(self.config.language):
             self._planned_text = text
             self._planned_candidates = {}

@@ -23,16 +23,20 @@ class OpenAINormalizer(BaseNormalizer):
         if self.config.normalize_max_chars == 0:
             raise ValueError("Normalizer max chars must be positive")
         if not llm.is_available:
-            raise ValueError(
-                "The 'llm' normalizer requires a configured LLM endpoint. "
-                "Set normalize_base_url / normalize_api_key or the corresponding environment variables."
+            logger.warning(
+                "openai normalizer: no LLM configured — step will be skipped. "
+                "Set normalize_base_url / normalize_api_key to enable it."
             )
+            return
         if not llm.settings.system_prompt:
             raise ValueError("Normalizer system prompt must not be empty")
         if "{text}" not in llm.settings.user_prompt_template:
             raise ValueError("Normalizer user prompt template must contain the {text} placeholder")
 
     def normalize(self, text: str, chapter_title: str = "") -> str:
+        if not self.get_normalizer_llm().is_available:
+            logger.info("openai normalizer skipped for chapter '%s': no LLM configured", chapter_title)
+            return text
         chunks = self.plan_processing_units(text, chapter_title=chapter_title)
         normalized_chunks = []
         for idx, chunk in enumerate(chunks, start=1):

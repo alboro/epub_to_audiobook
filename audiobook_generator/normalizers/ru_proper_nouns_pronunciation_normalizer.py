@@ -182,10 +182,11 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
 
     def validate_config(self):
         if not self.has_normalizer_llm():
-            raise ValueError(
-                "proper_nouns_pronunciation_ru requires a configured LLM endpoint. "
-                "Set normalize_base_url / normalize_api_key or the matching environment variables."
+            logger.warning(
+                "ru_proper_nouns_pronunciation: no LLM configured — step will be skipped. "
+                "Set normalize_base_url / normalize_api_key to enable it."
             )
+            return
         try:
             load_tsnorm_backend()
         except ImportError as exc:
@@ -212,6 +213,12 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
         }
 
     def normalize(self, text: str, chapter_title: str = "") -> str:
+        if not self.has_normalizer_llm():
+            logger.info(
+                "ru_proper_nouns_pronunciation skipped for chapter '%s': no LLM configured",
+                chapter_title,
+            )
+            return text
         if not is_russian_language(self.config.language):
             logger.info(
                 "proper_nouns_pronunciation_ru skipped for chapter '%s' because language is '%s'",
@@ -233,6 +240,11 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
         return self.merge_processed_units(processed_units, chapter_title=chapter_title)
 
     def plan_processing_units(self, text: str, chapter_title: str = "") -> list[str]:
+        if not self.has_normalizer_llm():
+            self._planned_text = text
+            self._planned_candidates = {}
+            self._planned_order = []
+            return []
         if not is_russian_language(self.config.language):
             self._planned_text = text
             self._planned_candidates = {}

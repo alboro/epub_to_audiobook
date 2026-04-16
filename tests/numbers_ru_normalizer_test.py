@@ -1149,5 +1149,86 @@ class TestAbbreviationsRuNormalizer(unittest.TestCase):
         self.assertEqual(normalize_step_name("ru_abbreviations"), AbbreviationsRuNormalizer.STEP_NAME)
 
 
+class TestLLMNormalizersGracefulSkip(unittest.TestCase):
+    """LLM-based normalizers must not raise when no LLM is configured.
+    They should construct successfully and return text unchanged from normalize()."""
+
+    def _no_llm_config(self, step: str):
+        """Config with no LLM credentials — normalize_base_url and api_key both absent."""
+        return make_config(
+            normalize_steps=step,
+            normalize_base_url=None,
+            normalize_api_key=None,
+        )
+
+    # --- ru_stress_ambiguity ---
+
+    def test_ru_stress_ambiguity_constructs_without_llm(self):
+        from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import StressAmbiguityLLMNormalizer
+        # Must NOT raise
+        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_stress_ambiguity"))
+        self.assertIsNotNone(n)
+
+    def test_ru_stress_ambiguity_normalize_returns_text_unchanged(self):
+        from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import StressAmbiguityLLMNormalizer
+        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_stress_ambiguity"))
+        text = "Если вспомнить нравственное уродство."
+        self.assertEqual(n.normalize(text), text)
+
+    def test_ru_stress_ambiguity_plan_units_returns_empty(self):
+        from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import StressAmbiguityLLMNormalizer
+        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_stress_ambiguity"))
+        units = n.plan_processing_units("Текст главы.")
+        self.assertEqual(units, [])
+
+    # --- ru_proper_nouns_pronunciation ---
+
+    def test_ru_proper_nouns_pronunciation_constructs_without_llm(self):
+        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
+        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_proper_nouns_pronunciation"))
+        self.assertIsNotNone(n)
+
+    def test_ru_proper_nouns_pronunciation_normalize_returns_text_unchanged(self):
+        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
+        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_proper_nouns_pronunciation"))
+        text = "Томас Пейн написал трактат."
+        self.assertEqual(n.normalize(text), text)
+
+    def test_ru_proper_nouns_pronunciation_plan_units_returns_empty(self):
+        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
+        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_proper_nouns_pronunciation"))
+        units = n.plan_processing_units("Текст.")
+        self.assertEqual(units, [])
+
+    # --- openai ---
+
+    def test_openai_normalizer_constructs_without_llm(self):
+        from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
+        n = OpenAINormalizer(self._no_llm_config("openai"))
+        self.assertIsNotNone(n)
+
+    def test_openai_normalizer_normalize_returns_text_unchanged(self):
+        from audiobook_generator.normalizers.openai_normalizer import OpenAINormalizer
+        n = OpenAINormalizer(self._no_llm_config("openai"))
+        text = "Некоторый текст для озвучивания."
+        self.assertEqual(n.normalize(text), text)
+
+    # --- Chain with LLM steps and no LLM ---
+
+    def test_chain_with_llm_steps_no_llm_passes_through(self):
+        """Full chain including LLM steps must not raise and must return text."""
+        from audiobook_generator.normalizers.base_normalizer import get_normalizer
+        config = self._no_llm_config(
+            "simple_symbols,ru_stress_ambiguity,ru_proper_nouns_pronunciation"
+        )
+        config.normalize = True
+        normalizer = get_normalizer(config)
+        text = "Томас Пейн написал «Век разума»."
+        result = normalizer.normalize(text)
+        # LLM steps skipped; simple_symbols may clean up quotes, but no crash
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
