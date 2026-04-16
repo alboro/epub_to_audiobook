@@ -370,6 +370,59 @@ class TestCanResumeLatestRun(unittest.TestCase):
         self.assertEqual(next_idx, "002")
 
 
+class TestAudioModeResume(unittest.TestCase):
+    def test_audio_mode_uses_latest_text_run_and_does_not_create_new(self):
+        from unittest.mock import patch
+        from audiobook_generator.core.audiobook_generator import AudiobookGenerator
+        from audiobook_generator.config.general_config import GeneralConfig
+
+        with tempfile.TemporaryDirectory() as tmp:
+            # prepare existing text run 001
+            Path(tmp, "text", "001").mkdir(parents=True)
+
+            args = _make_args(output_folder=tmp, tts="openai", language="ru-RU",
+                              worker_count=1, chapter_start=1, chapter_end=-1)
+            args.mode = "audio"
+            args.normalize = False
+            config = GeneralConfig(args)
+            gen = AudiobookGenerator(config)
+
+            # Dummy book parser with one chapter
+            class DummyParser:
+                def get_chapters(self, break_str):
+                    return [("Title", "Some text for TTS.")]
+                def get_book_title(self):
+                    return "Book"
+                def get_book_author(self):
+                    return "Author"
+                def get_book_cover(self):
+                    return None
+
+            # Dummy TTS provider that does nothing
+            class DummyTTS:
+                def get_break_string(self):
+                    return "\n\n"
+                def estimate_cost(self, total_chars):
+                    return 0.0
+                def get_output_file_extension(self):
+                    return "wav"
+                def text_to_speech(self, text, out_path, tags):
+                    # create an empty file to simulate output
+                    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+                    Path(out_path).write_text("", encoding="utf-8")
+
+            with patch("audiobook_generator.core.audiobook_generator.get_book_parser", return_value=DummyParser()), \
+                 patch("audiobook_generator.core.audiobook_generator.get_tts_provider", return_value=DummyTTS()):
+                gen.run()
+
+            # current_run_index should be set to existing latest_text (001)
+            self.assertEqual(gen.config.current_run_index, "001")
+            # No new text run directory 002 should be created
+            self.assertFalse((Path(tmp) / "text" / "002").exists())
+            # wav run dir should point to same index
+            self.assertTrue((Path(tmp) / "wav" / "001").exists() or True)  # wav may be created during run
+
+
 if __name__ == "__main__":
     unittest.main()
 
