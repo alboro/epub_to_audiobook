@@ -107,6 +107,7 @@ def make_config(**overrides):
         normalize_tsnorm_stress_yo=True,
         normalize_tsnorm_stress_monosyllabic=False,
         normalize_tsnorm_min_word_length=2,
+        normalize_log_changes=False,
         break_duration="1250",
         voice_rate=None,
         voice_volume=None,
@@ -962,7 +963,8 @@ class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
 class TestNormalizationPipelineRunner(unittest.TestCase):
     def test_resumes_chunked_units_and_saves_prompt_artifacts(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            config = make_config(output_folder=temp_dir, normalize_steps="dummy_chunked")
+            config = make_config(output_folder=temp_dir, normalize_steps="dummy_chunked",
+                                 normalize_log_changes=True)
             artifact_dir = Path(temp_dir) / "_chapter_artifacts" / "0001_Test"
             first = DummyChunkedNormalizer(config)
             runner = NormalizationPipelineRunner(config=config, artifact_dir=artifact_dir)

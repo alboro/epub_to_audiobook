@@ -507,34 +507,34 @@ class AudiobookGenerator:
 
         Returns (run_index, can_resume) where:
         - run_index is the latest run directory (e.g. '001') or None if none exist
-        - can_resume is True if normalization can be resumed from that run
+        - can_resume is True if the DB exists and has any incomplete (non-success) steps
         """
+        import sqlite3
+        from contextlib import closing
+
         latest_index = self._latest_run_index(kind)
         if not latest_index:
             return None, False
 
-        # Check if there's a normalization progress database for this run
-        from pathlib import Path
         state_path = Path(self.config.output_folder) / kind / latest_index / "_state" / "normalization_progress.sqlite3"
 
         if not state_path.exists():
-            # No progress database - cannot resume
             return latest_index, False
 
-        # Check if there are any incomplete normalization steps
         try:
-            from audiobook_generator.core.progress_store import NormalizationProgressStore
-            store = NormalizationProgressStore(state_path)
-
-            # Simple heuristic: if the database exists and has data, assume we can resume
-            # More sophisticated logic could check for specific incomplete states
-            with store._connect() as connection:
-                result = connection.execute("SELECT COUNT(*) FROM normalization_steps").fetchone()
-                has_progress = result and result[0] > 0
-
-            return latest_index, has_progress
+            with closing(sqlite3.connect(str(state_path), timeout=5)) as conn:
+                # Check total steps recorded
+                total = conn.execute("SELECT COUNT(*) FROM normalization_steps").fetchone()[0]
+                if total == 0:
+                    # DB exists but is empty — treat as incomplete (just started)
+                    return latest_index, True
+                # If any step is not 'success', there's unfinished work
+                incomplete = conn.execute(
+                    "SELECT COUNT(*) FROM normalization_steps WHERE status != 'success'"
+                ).fetchone()[0]
+                return latest_index, incomplete > 0
         except Exception as e:
-            logger.warning(f"Cannot check resume state for {state_path}: {e}")
+            logger.warning("Cannot check resume state for %s: %s", state_path, e)
             return latest_index, False
 
     def run(self):

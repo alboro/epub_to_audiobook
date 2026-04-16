@@ -91,13 +91,13 @@ def _preserve_case(source: str, replacement: str) -> str:
 @lru_cache(maxsize=512)
 def _expand_forms_pymorphy(base_lower: str) -> frozenset[str]:
     """Return all inflected forms for *base_lower* using pymorphy3."""
-    try:
-        import pymorphy3  # type: ignore
-    except ImportError:
+    from .pymorphy_cache import get_morph_analyzer
+
+    morph = get_morph_analyzer()
+    if morph is None:
         logger.warning("pymorphy3 not available; paradox guard will only match exact forms")
         return frozenset([base_lower])
 
-    morph = pymorphy3.MorphAnalyzer()
     forms: set[str] = {base_lower}
     for parse in morph.parse(base_lower):
         for form in parse.lexeme:

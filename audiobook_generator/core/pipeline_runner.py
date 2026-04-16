@@ -35,6 +35,11 @@ class NormalizationPipelineRunner:
             return text, []
 
         steps = self._resolve_steps(normalizer)
+        total_steps = len(steps)
+        logger.info(
+            "Normalization pipeline for '%s': %d steps, %d chars",
+            chapter_title, total_steps, len(text),
+        )
         current_text = text
         trace: list[tuple[str, str]] = []
 
@@ -43,6 +48,7 @@ class NormalizationPipelineRunner:
                 step_normalizer=step_normalizer,
                 step_name=step_name,
                 step_index=step_index,
+                total_steps=total_steps,
                 input_text=current_text,
                 chapter_title=chapter_title,
             )
@@ -56,7 +62,7 @@ class NormalizationPipelineRunner:
             return normalizer.iter_steps()
         return [(normalizer.get_step_name(), normalizer)]
 
-    def _run_step(self, *, step_normalizer, step_name, step_index, input_text, chapter_title):
+    def _run_step(self, *, step_normalizer, step_name, step_index, total_steps=None, input_text, chapter_title):
         step_dir = self.steps_root / f"{step_index:02d}_{self._sanitize_name(step_name)}"
         step_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,9 +88,8 @@ class NormalizationPipelineRunner:
             and output_path.is_file()
         ):
             logger.info(
-                "Resuming chapter '%s': reusing completed normalizer step %s",
-                chapter_title,
-                step_name,
+                "  [%d/%s] %s — skipped (cached)",
+                step_index, total_steps or '?', step_name,
             )
             cached_output = output_path.read_text(encoding="utf-8")
             self.step_summaries.append(
@@ -106,6 +111,11 @@ class NormalizationPipelineRunner:
             config_hash=config_hash,
             status="running",
             output_path=str(output_path),
+        )
+
+        logger.info(
+            "  [%d/%s] %s — running...",
+            step_index, total_steps or '?', step_name,
         )
 
         try:

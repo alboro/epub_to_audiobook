@@ -284,7 +284,8 @@ class NumbersRuNormalizer(BaseNormalizer):
     STEP_NAME = "ru_numbers"
 
     def __init__(self, config: GeneralConfig):
-        self.morph = MorphAnalyzer() if MorphAnalyzer is not None else None
+        from .pymorphy_cache import get_morph_analyzer
+        self.morph = get_morph_analyzer()
         super().__init__(config)
 
     def validate_config(self):

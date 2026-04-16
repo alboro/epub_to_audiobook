@@ -99,6 +99,7 @@ class GeneralConfig:
         self.normalize_stress_paradox_words = getattr(
             args, 'normalize_stress_paradox_words', None
         )
+        self.normalize_log_changes = getattr(args, 'normalize_log_changes', None)
 
         # TTS provider: Azure & Edge TTS specific arguments
         self.break_duration = getattr(args, 'break_duration', None)
