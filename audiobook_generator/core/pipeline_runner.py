@@ -97,7 +97,7 @@ class NormalizationPipelineRunner:
                     "step_index": step_index,
                     "step_name": step_name,
                     "changed": input_text != cached_output,
-                    "change_blocks": len(build_change_blocks(input_text, cached_output)),
+                    "change_blocks": len(build_change_blocks(input_text, cached_output)) if step_normalizer.should_log_changes() else None,
                     "step_dir": str(step_dir),
                 }
             )
@@ -157,7 +157,7 @@ class NormalizationPipelineRunner:
                     "step_index": step_index,
                     "step_name": step_name,
                     "changed": input_text != normalized,
-                    "change_blocks": len(build_change_blocks(input_text, normalized)),
+                    "change_blocks": len(build_change_blocks(input_text, normalized)) if step_normalizer.should_log_changes() else None,
                     "step_dir": str(step_dir),
                 }
             )
@@ -345,7 +345,8 @@ class NormalizationPipelineRunner:
             lines.append(f"## {item['step_index']:02d}. {item['step_name']}")
             lines.append("")
             lines.append(f"- changed: {'yes' if item['changed'] else 'no'}")
-            lines.append(f"- change_blocks: {item['change_blocks']}")
+            cb = item['change_blocks']
+            lines.append(f"- change_blocks: {cb if cb is not None else 'n/a (logging disabled)'}")
             lines.append(f"- step_dir: {item['step_dir']}")
             lines.append("")
 
