@@ -109,6 +109,25 @@ For every normalized chapter, the detailed step-by-step artifacts now also inclu
 - `_chapter_artifacts/<chapter>/_normalizer_steps/<step>/output.txt`
 - prompt/config files for model-backed steps, such as `00_system_prompt.txt`, `01_user_prompt_template.txt`, and per-chunk `01_user_prompt.txt`
 
+Overall file structure is:
+```
+book.epub
+book
+├ logs
+└ text/001/
+  ├── 0001_Chapter_One.txt
+  wav/001/
+  ├── chunks/
+  │   ├── 0001_Chapter_One/
+  │   │   ├── abc123.wav  # sentence 1
+  │   │   ├── def456.wav  # sentence 2
+  │   │   └── ...
+  │   └── 0002_Chapter_Two/
+  │       ├── ghi789.wav
+  │       └── ...
+  └── 0001_Chapter_One.wav  # смерженный файл (создаётся при package)
+```
+
 This means you can always inspect exactly what was sent to a model for a given chapter and step.
 
 Normalization is now resumable at the step level, and chunked steps such as `llm` are resumable at the chunk level.
