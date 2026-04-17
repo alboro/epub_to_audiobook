@@ -13,7 +13,11 @@ from audiobook_generator.normalizers.tsnorm_support import create_tsnorm_backend
 
 logger = logging.getLogger(__name__)
 
-PROPER_NOUN_WORD_PATTERN = re.compile(rf"\b[А-ЯЁ][А-ЯЁа-яё]*(?:-[А-ЯЁ][А-ЯЁа-яё]*)*\b")
+# Include combining diacritics (U+0300-U+036F, e.g. COMBINING ACUTE ACCENT U+0301 for stress marks)
+# so that "Права́ми" is matched as a whole word and the existing stress is detected.
+PROPER_NOUN_WORD_PATTERN = re.compile(
+    r"\b[А-ЯЁ][А-ЯЁа-яё\u0300-\u036f]*(?:-[А-ЯЁ][А-ЯЁа-яё\u0300-\u036f]*)*\b"
+)
 NON_NAME_WORDS = {
     "а",
     "без",

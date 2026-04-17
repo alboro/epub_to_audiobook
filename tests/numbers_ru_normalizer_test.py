@@ -583,6 +583,53 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
         # "Как он сам..." is a separate sentence and must be present
         self.assertIn("Как он сам указал в предисловии ко второй части.", result)
 
+    def test_split_prefers_sentence_boundary_over_comma(self):
+        """When a long sequence contains an existing sentence boundary ('. Capital'),
+        the split must happen there — not at a comma inside a sentence clause.
+        Bug: 'появилась, как около трёх часов' was split at comma before 'как',
+        producing 'появилась.' + 'Как около трёх...'."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        text = (
+            '"Не прошло и шести часов с тех пор, как я её закончил, в том виде, в каком она затем появилась, '
+            'как около трёх часов утра явилась стража с приказом. '
+            'Подписанным двумя комитетами общественного спасения и общей безопасности, взять меня под арест". '
+            'Это произошло утром двадцать восьмого декабря.'
+        )
+        result = normalizer.normalize(text)
+        # The bad split: comma before 'как' was used as split point
+        self.assertNotIn("появилась. Как", result,
+                         "Must not split 'появилась, как около трёх' at the comma")
+        # The sentence ending at 'приказом.' must be kept intact as one unit
+        self.assertIn("как около трёх часов утра явилась стража с приказом.", result)
+        # 'Подписанным' must stay together with the rest of its clause
+        self.assertIn("Подписанным двумя комитетами общественного спасения", result)
+
+    def test_no_dangling_short_preposition_at_end_of_chunk(self):
+        """A space-split must not leave a short function word (≤3 chars) dangling
+        at the end of the left fragment.
+        Bug: long text was split at the space before 'По', producing
+        '...третьего года. По.' as one TTS unit and 'Старому стилю.' as the next."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        text = (
+            '"Я передаю Мерлену де Тионвилю экземпляр последней работы Тэ-Пэйна, бывшего нашего коллеги, '
+            'находящегося под стражей со времени декрета. Исключившего иностранцев из национального '
+            'представительства. Эта книга была написана автором в начале девяносто третьего года. '
+            'По старому стилю. Я взял на себя её перевод до революции против священников, и она была '
+            'опубликована по-французски примерно в то же время. Кутон, которому я её послал, по-видимому, '
+            'был недоволен мною за то, что я перевёл эту работу".'
+        )
+        result = normalizer.normalize(text)
+        # 'По старому стилю' must NOT be split as 'По.' + 'Старому стилю.'
+        self.assertNotIn("По. Старому", result,
+                         "Must not split 'По старому стилю' at the space after 'По'")
+        # 'Кутон, которому' must stay together
+        self.assertIn("Кутон, которому", result,
+                      "'Кутон, которому' must not be split")
+
 
 class TestSharedNormalizerLLMSupport(unittest.TestCase):
     def test_choice_batch_planner_groups_multiple_items(self):
@@ -735,6 +782,23 @@ class TestProperNounsRuNormalizer(unittest.TestCase):
             normalizer.normalize("Для ясности автор этой книжки не лингвист. Но Фицджеральда он помнит."),
             "Для ясности автор этой книжки не лингвист. Но Фицджеральда́ он помнит.",
         )
+
+    def test_does_not_add_second_stress_to_prestressed_word(self):
+        """If the source text already has a stress mark (combining acute), the normalizer
+        must NOT add another one.  This was a bug: 'Права́ми' (stress on last 'а') was
+        converted to 'Пра́ва́ми' (two stress marks) because the regex did not include
+        combining diacritics in the word character class."""
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_names"))
+        # Real tsnorm backend would add "пра́" stress to "Правами" → double stress without fix
+        normalizer.backend = lambda text: "Пра\u0301вами" if text == "Правами" else text
+        text = 'его "\u041f\u0440\u0430\u0432\u0430\u0301\u043c\u0438 \u0447\u0435\u043b\u043e\u0432\u0435\u043a\u0430"'  # Права́ми
+        result = normalizer.normalize(text)
+        import unicodedata
+        accent_count = sum(1 for c in result if unicodedata.combining(c))
+        self.assertEqual(accent_count, 1,
+                         f"Expected exactly 1 accent in result, got {accent_count}: {repr(result)}")
+        self.assertIn("\u041f\u0440\u0430\u0432\u0430\u0301\u043c\u0438", result,
+                      "Original 'Права́ми' must be preserved unchanged")
 
 
 class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):

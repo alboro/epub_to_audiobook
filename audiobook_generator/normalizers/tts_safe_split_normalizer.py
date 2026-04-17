@@ -21,6 +21,9 @@ RIGHT_TRIM_CHARS = " \t\r\n,;:-–—"
 SENTENCE_END_CHARS = ".!?"
 
 PRIORITY_PATTERNS = (
+    # 0. Existing sentence boundary: period/!/? followed by space and capital letter.
+    #    This is always the best split point — avoids breaking clauses mid-sentence.
+    re.compile(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z«\"])", re.UNICODE),
     re.compile(r"[;:](?=\s|$)"),
     re.compile(r"\s+(?=(?:и|а|но|однако)\b)", re.IGNORECASE),
     re.compile(r",\s+(?=(?:а также|однако|но|зато|поэтому|причем|притом|при этом|затем|потом)\b)", re.IGNORECASE),
@@ -250,6 +253,14 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
             return False
         if len(right) < MIN_SPLIT_FRAGMENT_CHARS and len(right_words) < MIN_SPLIT_FRAGMENT_WORDS:
             return False
+
+        # Avoid leaving a dangling short function word (preposition/article) at end of left.
+        # e.g. "...третьего года. По" → "По" is only 2 chars and belongs to the next phrase.
+        if left_words:
+            last_word = left_words[-1].strip('.,!?;:\'"»«')
+            if len(last_word) <= 3:
+                return False
+
         return True
 
     def _normalize_sentence_start(self, sentence: str) -> str:
