@@ -261,6 +261,49 @@ class TestParadoxGuardFromConfig(unittest.TestCase):
         guard = TTSStressParadoxGuard.from_config("Т+омас")  # stress on О
         self.assertTrue(guard.is_paradox_word("томас"))
 
+    def test_multiword_entry_registers_each_word(self):
+        """'Льво́м Толсты́м' (multi-word) must register both 'льво́м' and 'толсты́м'
+        individually so that apply_paradox_overrides can correct each word in text."""
+        guard = TTSStressParadoxGuard.from_config(f"Льво\u0301м Толсты\u0301м")
+        # Both individual words must be recognised
+        self.assertTrue(guard.is_paradox_word("льво́м"), "льво́м must be in paradox map")
+        self.assertTrue(guard.is_paradox_word("толсты́м"), "толсты́м must be in paradox map")
+        self.assertTrue(guard.is_paradox_word("львом"), "bare льво́м must be recognised")
+        self.assertTrue(guard.is_paradox_word("толстым"), "bare толсты́м must be recognised")
+
+    def test_multiword_entry_apply_overrides(self):
+        """apply_paradox_overrides must correct each word from a multi-word entry.
+        Bug: 'Льво́м Толсты́м' was treated as a single token → neither word was fixed.
+        After fix: 'То́лстым' (wrong tsnorm stress on о) → 'Толсты́м' (correct stress on ы)."""
+        guard = TTSStressParadoxGuard.from_config(f"Льво\u0301м Толсты\u0301м")
+        # Simulate tsnorm putting wrong stress on 'о' in Толстым
+        wrong = f"То\u0301лстым"
+        text = f"Присланном графом Льво\u0301м {wrong} в газету."
+        result = guard.apply_paradox_overrides(text)
+        self.assertIn(f"Толсты\u0301м", result,
+                      "Stress on 'ы' must be enforced for 'Толстым' via multi-word paradox entry")
+        self.assertNotIn(f"То\u0301лстым", result,
+                         "Wrong stress on 'о' in Толстым must be replaced")
+
+    def test_multiword_entry_pipeline_integration(self):
+        """End-to-end: ru_llm_proper_nouns_pronunciation must apply paradox guard
+        overrides from config even without LLM, so that 'То́лстым' becomes 'Толсты́м'."""
+        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import (
+            ProperNounsPronunciationRuNormalizer,
+        )
+        from tests.numbers_ru_normalizer_test import make_config
+        config = make_config(
+            normalize_steps="ru_llm_proper_nouns_pronunciation",
+            normalize_base_url=None,
+            normalize_api_key=None,
+            normalize_stress_paradox_words=f"Льво\u0301м Толсты\u0301м",
+        )
+        n = ProperNounsPronunciationRuNormalizer(config)
+        wrong = f"То{COMBINING_ACUTE}лстым"
+        result = n.normalize(f"написанное графом {wrong}.")
+        self.assertIn(f"Толсты{COMBINING_ACUTE}м", result,
+                      "Pipeline must enforce 'Толсты́м' from paradox config without LLM")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -144,7 +144,7 @@ class ProperNounCandidate:
 
 class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
     STEP_NAME = "ru_llm_proper_nouns_pronunciation"
-    STEP_VERSION = 2
+    STEP_VERSION = 3  # bumped: builtin hints now applied without LLM + paradox guard integrated
 
     def __init__(self, config: GeneralConfig):
         self.backend = None
@@ -218,6 +218,9 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
         Words that are present in the builtin stress/pronunciation hint tables are
         corrected regardless of any stress marks that upstream normalizers may have
         placed on them.  All other words are left untouched (including their accents).
+
+        Also applies ``normalize_stress_paradox_words`` overrides from config so that
+        user-configured paradox words are enforced in the output even without LLM.
         """
         # Pattern that includes combining diacritics so we can match e.g. "То́лстым" whole.
         word_re = re.compile(
@@ -239,7 +242,12 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
                 return preserve_case(bare, normalize_stress_marks(replacement))
             return word  # not in any hint table — keep as-is
 
-        return word_re.sub(replace, text)
+        result = word_re.sub(replace, text)
+
+        # Apply user-configured paradox overrides (normalize_stress_paradox_words).
+        from audiobook_generator.normalizers.ru_tts_stress_paradox_guard import get_paradox_guard
+        guard = get_paradox_guard(self.config)
+        return guard.apply_paradox_overrides(result)
 
     def normalize(self, text: str, chapter_title: str = "") -> str:
         if not is_russian_language(self.config.language):

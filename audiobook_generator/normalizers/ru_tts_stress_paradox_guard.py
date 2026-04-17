@@ -188,7 +188,18 @@ class TTSStressParadoxGuard:
     # ------------------------------------------------------------------
 
     def _register(self, entry: str) -> None:
-        """Parse one config entry and populate self._map for all its forms."""
+        """Parse one config entry and populate self._map for all its forms.
+
+        Multi-word entries (e.g. ``Льво́м Толсты́м``) are split on whitespace and
+        each word is registered independently.
+        """
+        words = entry.strip().split()
+        if len(words) > 1:
+            for word in words:
+                self._register(word)
+            return
+
+        # Single-word path
         # Normalize stress notation to combining acute
         canonical_with_stress = _plus_to_acute(entry)
         base_lower = _strip_acute(canonical_with_stress).lower()
