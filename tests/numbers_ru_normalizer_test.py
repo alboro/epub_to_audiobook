@@ -692,6 +692,27 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
         self.assertNotIn("Спустя тысячу семьсот", r2,
                          "'спустя тысячу семьсот' must not be capitalized from a wrong split")
 
+    def test_no_split_inside_sentence_when_left_ends_with_short_sentence_word(self):
+        """When two sentences are merged by sentencex into >180 chars, the split must
+        happen at the sentence boundary ('. Capital'), even if the left sentence
+        ends with a short word like 'и'.
+        Bug: '...схваченным и. Следовательно, не намеревался...' (192 chars total)
+        was hard-split at position 180 producing 'Следовательно. Не намеревался'
+        because the dangling-short-word check rejected '. Следовательно' split
+        (left ended with 'и.' ≤ 3 chars)."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        text = (
+            "А то, что он был предан, или, иными словами, схвачен по доносу одного "
+            "из своих последователей, показывает, что он не намеревался быть схваченным и. "
+            "Следовательно, не намеревался быть распятым."
+        )
+        result = normalizer.normalize(text)
+        self.assertNotIn("Следовательно. Не", result,
+                         "Must not hard-split at 180 chars when a sentence boundary exists")
+        self.assertIn("Следовательно, не намеревался", result)
+
     def test_no_split_inside_quoted_dialogue_after_vocative(self):
         """Splitting at a comma inside direct speech ('Авени́р, чей сын этот юноша?')
         produces 'Авени́р. Чей сын этот юноша?' — the comma is a vocative separator,

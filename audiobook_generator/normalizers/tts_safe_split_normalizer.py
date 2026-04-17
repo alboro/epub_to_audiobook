@@ -270,7 +270,10 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
 
         # Avoid leaving a dangling short function word (preposition/article) at end of left.
         # e.g. "...третьего года. По" → "По" is only 2 chars and belongs to the next phrase.
-        if left_words:
+        # Exception: if the left part already ends with sentence-closing punctuation (.!?),
+        # the short word is the legitimate last word of that sentence ("...схваченным и."),
+        # not a dangling preposition — do NOT reject.
+        if left_words and left and left[-1] not in SENTENCE_END_CHARS:
             last_word = left_words[-1].strip('.,!?;:\'"»«`')
             if len(last_word) <= 3:
                 return False
