@@ -257,7 +257,16 @@ def merge_ini_into_args(args: Any, ini_values: Dict[str, Any]) -> None:
     for key, raw_value in ini_values.items():
         current = getattr(args, key, None)
         if current is not None:
-            continue  # CLI wins
+            # For bool flags (action="store_true"), argparse defaults to False when
+            # the flag is absent — that is indistinguishable from the user not passing
+            # it.  We should still let the INI value win in that case.
+            # Only skip if the flag was explicitly set to True by the user.
+            if key in BOOL_FIELDS:
+                if current is True:
+                    continue  # user explicitly passed --flag, CLI wins
+                # current is False → may be argparse default, let INI override
+            else:
+                continue  # CLI wins for non-bool fields
         if isinstance(raw_value, str):
             if key in BOOL_FIELDS:
                 # Boolean fields: coerce "true"/"1"/"yes" → True, "false"/"0"/"no" → False

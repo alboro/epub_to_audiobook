@@ -549,6 +549,40 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
         self.assertNotIn("род. Человеческий", result)
         self.assertIn("род человеческий", result)
 
+    def test_short_sentence_not_merged_with_next_long_sentence(self):
+        """Short sentence like 'Или нет.' must be merged with the PREVIOUS sentence,
+        not the next long one — to avoid producing a semantically incoherent chunk
+        like 'Или нет Заявления автора...' (180 chars, sounds awkward in TTS)."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(
+                normalize_steps="tts_llm_safe_split",
+                normalize_tts_safe_max_chars=180,
+            )
+        )
+        text = (
+            "Было ли это связано с веком разума? "
+            "C его выпадом против богини Приро\u0301ды? "
+            "Или нет. "
+            "Заявления автора и переводчика согласуются благодаря тому факту, "
+            "что Пэйн подготовил рукопись со значительными добавлениями "
+            "и изменениями к публикации на английском языке. "
+            "Как он сам указал в предисловии ко второй части."
+        )
+        result = normalizer.normalize(text)
+        # The bad merge: "Или нет Заявления" (sentence boundary stripped)
+        self.assertNotIn("нет Заявления", result,
+                         "'Или нет.' must not be merged forwards into 'Заявления автора...'")
+        # The long sentence must be kept intact (171 chars < 180, should not be split)
+        self.assertIn(
+            "Заявления автора и переводчика согласуются благодаря тому факту, "
+            "что Пэйн подготовил рукопись со значительными добавлениями "
+            "и изменениями к публикации на английском языке.",
+            result,
+            "The 171-char sentence must not be broken at a comma",
+        )
+        # "Как он сам..." is a separate sentence and must be present
+        self.assertIn("Как он сам указал в предисловии ко второй части.", result)
+
 
 class TestSharedNormalizerLLMSupport(unittest.TestCase):
     def test_choice_batch_planner_groups_multiple_items(self):
@@ -1123,6 +1157,43 @@ class TestAbbreviationsRuNormalizer(unittest.TestCase):
         result = self.n.normalize("Россия и Москва")
         self.assertIn("Россия", result)
         self.assertIn("Москва", result)
+
+    # --- ALL-CAPS regular words must NOT be letter-expanded ---
+
+    def test_allcaps_regular_word_amerikanskoy_not_expanded(self):
+        """АМЕРИКАНСКОЙ — a regular Russian word in ALL-CAPS (heading/emphasis), not an acronym.
+        It must pass through unchanged, not be expanded letter-by-letter."""
+        result = self.n.normalize("АМЕРИКАНСКОЙ Революции")
+        self.assertIn("АМЕРИКАНСКОЙ", result,
+                      "АМЕРИКАНСКОЙ is a real word, not an acronym — must not be expanded")
+
+    def test_allcaps_regular_word_zaveta_not_expanded(self):
+        """ЗАВЕТА — a real Russian word in ALL-CAPS. Must not be letter-expanded."""
+        result = self.n.normalize("ЗАВЕТА")
+        self.assertIn("ЗАВЕТА", result,
+                      "ЗАВЕТА is a real word, not an acronym — must not be expanded")
+
+    def test_allcaps_regular_word_revolyutsii_not_expanded(self):
+        """РЕВОЛЮЦИИ — a real Russian word in ALL-CAPS. Must not be letter-expanded."""
+        result = self.n.normalize("РЕВОЛЮЦИИ народа")
+        self.assertIn("РЕВОЛЮЦИИ", result,
+                      "РЕВОЛЮЦИИ is a real word, not an acronym — must not be expanded")
+
+    def test_prestressed_word_not_double_stressed(self):
+        """A word that already has a stress mark must not gain a second one.
+
+        If the source text or a preceding normalizer adds 'Аме́рика́нской' (double stress),
+        ru_abbreviations must not worsen it.  Equally, a normally stressed word
+        'Америка́нской' must come out unchanged.
+        """
+        ACUTE = "\u0301"
+        single = "Аме" + ACUTE + "риканской"
+        result = self.n.normalize(single)
+        self.assertEqual(result, single, "Single-stressed word must not be changed")
+
+        double = "Аме" + ACUTE + "рика" + ACUTE + "нской"
+        result2 = self.n.normalize(double)
+        self.assertEqual(result2, double, "Already-double-stressed word must not be changed")
 
     # --- Language guard ---
 

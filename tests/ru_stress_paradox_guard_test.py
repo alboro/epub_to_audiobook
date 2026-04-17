@@ -59,6 +59,35 @@ class TestParadoxGuardNoStress(unittest.TestCase):
         self.assertNotIn(COMBINING_ACUTE, result.split()[0])
         self.assertIn("Томас", result)
 
+    def test_apply_strips_stress_on_o_variant(self):
+        """То́мас (stress on О) — the guard must strip it → 'Томас'."""
+        text = "То" + COMBINING_ACUTE + "мас и его книга"
+        result = self.guard.apply_paradox_overrides(text)
+        self.assertNotIn(COMBINING_ACUTE, result.split()[0],
+                         "Stress on О must be removed from 'Томас'")
+        self.assertTrue(result.startswith("Томас"),
+                        f"Expected 'Томас ...' but got: {result!r}")
+
+    def test_apply_strips_stress_on_a_variant(self):
+        """Тома́с (stress on А) — also must be stripped → 'Томас'."""
+        text = "Тома" + COMBINING_ACUTE + "с и его книга"
+        result = self.guard.apply_paradox_overrides(text)
+        self.assertNotIn(COMBINING_ACUTE, result.split()[0],
+                         "Stress on А must be removed from 'Томас'")
+        self.assertTrue(result.startswith("Томас"),
+                        f"Expected 'Томас ...' but got: {result!r}")
+
+    def test_apply_strips_both_stress_variants_in_one_text(self):
+        """Both То́мас and Тома́с can appear in the same text — both must be stripped."""
+        text = ("То" + COMBINING_ACUTE + "мас писал, "
+                "а Тома" + COMBINING_ACUTE + "с говорил")
+        result = self.guard.apply_paradox_overrides(text)
+        self.assertNotIn(COMBINING_ACUTE + "мас", result,
+                         "Stress on О not stripped")
+        self.assertNotIn("а" + COMBINING_ACUTE + "с", result,
+                         "Stress on А not stripped")
+        self.assertIn("Томас", result)
+
     def test_apply_strips_stress_from_inflected(self):
         # "Томасу" with bogus stress added by normalizer
         text = "Тома" + COMBINING_ACUTE + "су Пейну"

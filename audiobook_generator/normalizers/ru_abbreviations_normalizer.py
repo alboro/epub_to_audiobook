@@ -59,9 +59,20 @@ _RU_LETTER_NAMES: dict[str, str] = {
 }
 
 # Pattern: 2+ consecutive Cyrillic uppercase letters not flanked by Cyrillic letters.
-# Avoids matching normal words written in ALL-CAPS (they would be whole-word matches
-# with actual vowels, making them pronounceable — left to TTS).
+# NOTE: We intentionally do NOT use a very large upper bound here — real Russian
+# acronyms (США, НАТО, ООН, ВЛКСМ, ДОСААФ…) are typically ≤ 7 characters.
+# Longer ALL-CAPS sequences are usually regular words in uppercase (headings, emphasis)
+# and must NOT be letter-expanded; they are filtered in _expand_acronym_match below.
 _ACRONYM_PATTERN = re.compile(r"\b([А-ЯЁ]{2,})\b")
+
+# Russian uppercase vowels — used to distinguish acronyms from regular words written in caps.
+_RU_VOWELS_UPPER = frozenset("АЕЁИОУЫЭЮЯ")
+
+# Heuristic: if an ALL-CAPS word has ≥ 3 vowels, it is almost certainly a regular word
+# (e.g. ЗАВЕТА = З-А-В-Е-Т-А → 3 vowels; АМЕРИКАНСКОЙ → 5 vowels), not an acronym.
+_MAX_ACRONYM_VOWELS = 2
+# Hard length cap for acronym expansion; longer words are always treated as regular words.
+_MAX_ACRONYM_LEN = 7
 
 # ---------------------------------------------------------------------------
 # Deterministic abbreviation expansion table.
@@ -164,8 +175,21 @@ class AbbreviationsRuNormalizer(BaseNormalizer):
     # ------------------------------------------------------------------
 
     def _expand_acronym_match(self, match: re.Match[str]) -> str:
-        """Callback for _ACRONYM_PATTERN.subn — expands a single acronym."""
+        """Callback for _ACRONYM_PATTERN.subn — expands a single acronym.
+
+        Returns the original text unchanged if the matched word looks like a
+        regular Russian word written in ALL-CAPS rather than a true acronym.
+        """
         acronym = match.group(1)
+
+        # Reject overly long words (regular words in ALL-CAPS, e.g. headings)
+        if len(acronym) > _MAX_ACRONYM_LEN:
+            return acronym
+
+        # Reject words with too many vowels (real words, not acronyms)
+        vowel_count = sum(1 for ch in acronym if ch in _RU_VOWELS_UPPER)
+        if vowel_count > _MAX_ACRONYM_VOWELS:
+            return acronym
 
         if _HAS_RUNORM:
             return self._expand_via_runorm(acronym)

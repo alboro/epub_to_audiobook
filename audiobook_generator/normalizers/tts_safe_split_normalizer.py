@@ -144,18 +144,32 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
             safe_sentences.extend(split_parts)
             inserted_splits += max(0, len(split_parts) - 1)
 
-        # Merge very short sentences with the next one to avoid TTS instability
+        # Merge very short sentences with neighbors to avoid TTS instability.
+        # Prefer merging with the PREVIOUS sentence (better semantic coherence):
+        # "Или нет." is a reply to the previous question, not a preamble to the next.
         merged_sentences = []
         i = 0
         while i < len(safe_sentences):
             current = safe_sentences[i]
-            if len(current) < MIN_TTS_SAFE_CHARS and i + 1 < len(safe_sentences):
-                # Merge current with next
-                next_sent = safe_sentences[i + 1]
-                # Remove trailing period from current before merging
-                base = current.rstrip(".!?").rstrip()
-                merged_sentences.append(f"{base} {next_sent}")
-                i += 2
+            if len(current) < MIN_TTS_SAFE_CHARS:
+                # Try merge with PREVIOUS first (fits and previous exists)
+                if (
+                    merged_sentences
+                    and len(merged_sentences[-1]) + 1 + len(current) <= self.max_chars
+                ):
+                    prev = merged_sentences.pop()
+                    base_curr = current.rstrip(".").rstrip()
+                    merged_sentences.append(f"{prev} {base_curr}.")
+                    i += 1
+                elif i + 1 < len(safe_sentences):
+                    # Fall back to merge with NEXT
+                    next_sent = safe_sentences[i + 1]
+                    base = current.rstrip(".!?").rstrip()
+                    merged_sentences.append(f"{base} {next_sent}")
+                    i += 2
+                else:
+                    merged_sentences.append(current)
+                    i += 1
             else:
                 merged_sentences.append(current)
                 i += 1
