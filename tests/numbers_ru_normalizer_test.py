@@ -800,6 +800,28 @@ class TestProperNounsRuNormalizer(unittest.TestCase):
         self.assertIn("\u041f\u0440\u0430\u0432\u0430\u0301\u043c\u0438", result,
                       "Original 'Права́ми' must be preserved unchanged")
 
+    def test_no_double_stress_on_царя_and_отца(self):
+        """Words like 'Царя́' and 'Отца́' that already carry a stress mark must not
+        receive a second one from the ru_proper_names normalizer.
+        Bug: the word regex stopped at the combining-accent char, matching only
+        'Царя' (without accent) as a candidate, then adding 'ца́рь' stress on top."""
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_names"))
+        # Backend that would add stress to bare "Царя" or "Отца"
+        def backend(word):
+            mapping = {"Царя": "Царя\u0301", "Отца": "Отца\u0301"}
+            return mapping.get(word, word)
+        normalizer.backend = backend
+        import unicodedata
+        ACUTE = "\u0301"
+        text = f"на Царя{ACUTE} царей и Отца{ACUTE} человечества"
+        result = normalizer.normalize(text)
+        # No double accents anywhere in result
+        for i in range(len(result) - 2):
+            if unicodedata.combining(result[i + 1]) and unicodedata.combining(result[i + 2]):
+                self.fail(
+                    f"Double accent found in: {repr(result[max(0,i-4):i+8])}"
+                )
+
 
 class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_builds_pronunciation_variants_and_applies_selected_options(self):

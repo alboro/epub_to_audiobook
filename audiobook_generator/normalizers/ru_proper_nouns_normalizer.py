@@ -148,7 +148,13 @@ class ProperNounsRuNormalizer(BaseNormalizer):
         return normalized
 
     def _should_accent_candidate(self, text: str, start_index: int, word: str) -> bool:
+        import unicodedata as _ud
         if COMBINING_ACUTE in word:
+            return False
+        # The regex may stop before a trailing combining accent (e.g. "Царя́" → matches
+        # "Царя", leaving "́" at match_end).  Check the char right after the match.
+        match_end = start_index + len(word)
+        if match_end < len(text) and _ud.combining(text[match_end]):
             return False
         if len(word) < 2:
             return False
