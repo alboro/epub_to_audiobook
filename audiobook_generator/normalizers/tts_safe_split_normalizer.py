@@ -25,7 +25,8 @@ PRIORITY_PATTERNS = (
     #    This is always the best split point — avoids breaking clauses mid-sentence.
     re.compile(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z«\"])", re.UNICODE),
     re.compile(r"[;:](?=\s|$)"),
-    re.compile(r"\s+(?=(?:и|а|но|однако)\b)", re.IGNORECASE),
+    # Conjunctions after punctuation only — prevents splitting "Ветхого и Нового" (no comma)
+    re.compile(r"(?<=[,;])\s+(?=(?:и|а|но|однако)\b)", re.IGNORECASE),
     re.compile(r",\s+(?=(?:а также|однако|но|зато|поэтому|причем|притом|при этом|затем|потом)\b)", re.IGNORECASE),
     re.compile(
         r",\s+(?=(?:котор(?:ый|ая|ое|ые|ого|ому|ым|ых|ую|ой|ою)|обосновывающ\w*|существующ\w*|позволяющ\w*|делающ\w*|создающ\w*)\b)",

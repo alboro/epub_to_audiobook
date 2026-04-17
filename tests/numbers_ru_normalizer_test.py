@@ -630,6 +630,35 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
         self.assertIn("Кутон, которому", result,
                       "'Кутон, которому' must not be split")
 
+    def test_no_split_before_conjunction_without_preceding_punctuation(self):
+        """Pattern for 'и/а/но/однако' must only fire after a comma or semicolon.
+        Bug: 'Из Ве́тхого и Но́вого Заве́тов' was split to 'Из Ве́тхого. И Но́вого',
+        and 'характера и в ложном изображении' became 'характера. И в ложном'.
+        Neither 'и' is preceded by a comma — the split must not happen."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        # Case 1: 'и' without preceding comma connects two adjectives
+        text1 = (
+            'Из Ве\u0301тхого и Но\u0301вого Заве\u0301тов, говорят они, мы берём только то, '
+            'что полезно, главным образом нравственное учение и духовную практику.'
+        )
+        r1 = normalizer.normalize(text1)
+        self.assertNotIn("Ве\u0301тхого. И", r1,
+                         "'Из Ве́тхого и Но́вого' must not be split before 'И'")
+        self.assertIn("Ве\u0301тхого и Но\u0301вого", r1)
+
+        # Case 2: 'и' without preceding comma connects two prepositional phrases
+        text2 = (
+            'Очернении его характера и в ложном изображении всех обстоятельств и событий его жизни, '
+            'не станет ли для потомства, спустя тысячу семьсот лет.'
+        )
+        r2 = normalizer.normalize(text2)
+        self.assertNotIn("характера. И в ложном", r2,
+                         "'характера и в ложном' must not be split before 'И'")
+        self.assertNotIn("Спустя тысячу семьсот", r2,
+                         "'спустя тысячу семьсот' must not be capitalized from a wrong split")
+
 
 class TestSharedNormalizerLLMSupport(unittest.TestCase):
     def test_choice_batch_planner_groups_multiple_items(self):
