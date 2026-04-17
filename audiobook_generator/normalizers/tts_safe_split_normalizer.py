@@ -271,9 +271,18 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
         # Avoid leaving a dangling short function word (preposition/article) at end of left.
         # e.g. "...третьего года. По" → "По" is only 2 chars and belongs to the next phrase.
         if left_words:
-            last_word = left_words[-1].strip('.,!?;:\'"»«')
+            last_word = left_words[-1].strip('.,!?;:\'"»«`')
             if len(last_word) <= 3:
                 return False
+
+        # Reject splits where the right side starts with a lowercase Cyrillic letter — this
+        # almost certainly means we are mid-clause (e.g. splitting inside a quoted address
+        # "Авени́р, чей сын..." → left="Авени́р", right="чей сын...").
+        # Pattern 0 (`. Capital`) already guarantees an uppercase start, so this check
+        # only rejects inappropriate comma/space splits.
+        first_alpha = next((ch for ch in right if ch.isalpha()), None)
+        if first_alpha is not None and first_alpha.islower() and '\u0400' <= first_alpha <= '\u04ff':
+            return False
 
         return True
 

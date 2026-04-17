@@ -692,6 +692,25 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
         self.assertNotIn("Спустя тысячу семьсот", r2,
                          "'спустя тысячу семьсот' must not be capitalized from a wrong split")
 
+    def test_no_split_inside_quoted_dialogue_after_vocative(self):
+        """Splitting at a comma inside direct speech ('Авени́р, чей сын этот юноша?')
+        produces 'Авени́р. Чей сын этот юноша?' — the comma is a vocative separator,
+        not a sentence boundary.  The right side starts with lowercase 'чей', so the
+        split must be rejected and a better point chosen."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        text = (
+            'В пятьдесят пятом стихе этой главы сказано: он сказал Авени́ру, '
+            'начальнику войска. `Авени́р, чей сын этот юноша?` И Авени́р сказал: '
+            '`Да живёт душа твоя, о царь, не знаю`. И царь сказал. '
+            '`Разузна́й, чей сын этот отрок`.'
+        )
+        result = normalizer.normalize(text)
+        self.assertNotIn("Авени́р. Чей", result,
+                         "Must not split at vocative comma inside quoted dialogue")
+        self.assertIn("Авени́р, чей", result)
+
     def test_no_split_before_и_more_того(self):
         """'рукописи, и более того' must NOT be split to 'рукописи. И более того'.
         A comma before 'и более того' (adverbial phrase) must not trigger a split."""
