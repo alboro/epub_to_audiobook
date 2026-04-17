@@ -156,11 +156,41 @@ class AbbreviationsRuNormalizer(BaseNormalizer):
                 normalized = new
                 changed += n
 
-        # Pass 2: ALL-CAPS acronym expansion
-        new, n = _ACRONYM_PATTERN.subn(self._expand_acronym_match, normalized)
-        if n:
-            normalized = new
-            changed += n
+        # Pass 2: ALL-CAPS acronym expansion.
+        # Strip combining diacritics first so that pre-stressed words like "ТО́МАС"
+        # are matched as a single token ("ТОМАС") rather than split at the accent.
+        import unicodedata as _ud
+        stripped = "".join(ch for ch in normalized if not _ud.combining(ch))
+        # Build a mapping from stripped positions back to original positions.
+        orig_positions: list[int] = []
+        for i, ch in enumerate(normalized):
+            if not _ud.combining(ch):
+                orig_positions.append(i)
+        orig_positions.append(len(normalized))  # sentinel
+
+        expanded_parts: list[str] = []
+        prev_stripped = 0
+        prev_orig = 0
+
+        for m in _ACRONYM_PATTERN.finditer(stripped):
+            s_start, s_end = m.start(1), m.end(1)
+            o_start = orig_positions[s_start]
+            o_end = orig_positions[s_end]
+
+            replacement = self._expand_acronym_match_str(m.group(1), stripped, s_start, s_end)
+
+            # Copy original text up to this match (preserving combining chars), then replacement
+            expanded_parts.append(normalized[prev_orig:o_start])
+            if replacement != m.group(1):
+                expanded_parts.append(replacement)
+                changed += 1
+            else:
+                expanded_parts.append(normalized[o_start:o_end])
+            prev_stripped = s_end
+            prev_orig = o_end
+
+        expanded_parts.append(normalized[prev_orig:])
+        normalized = "".join(expanded_parts)
 
         logger.info(
             "abbreviations_ru applied to chapter '%s': %d replacements (runorm=%s)",
@@ -175,12 +205,15 @@ class AbbreviationsRuNormalizer(BaseNormalizer):
     # ------------------------------------------------------------------
 
     def _expand_acronym_match(self, match: re.Match[str]) -> str:
-        """Callback for _ACRONYM_PATTERN.subn — expands a single acronym.
+        """Callback for _ACRONYM_PATTERN.subn — kept for backwards compatibility."""
+        return self._expand_acronym_match_str(match.group(1), match.string, match.start(1), match.end(1))
+
+    def _expand_acronym_match_str(self, acronym: str, text: str, s_start: int, s_end: int) -> str:
+        """Expand a single ALL-CAPS acronym, or return it unchanged if it looks like a name.
 
         Returns the original text unchanged if the matched word looks like a
         regular Russian word written in ALL-CAPS rather than a true acronym.
         """
-        acronym = match.group(1)
 
         # Reject overly long words (regular words in ALL-CAPS, e.g. headings)
         if len(acronym) > _MAX_ACRONYM_LEN:
@@ -190,6 +223,19 @@ class AbbreviationsRuNormalizer(BaseNormalizer):
         vowel_count = sum(1 for ch in acronym if ch in _RU_VOWELS_UPPER)
         if vowel_count > _MAX_ACRONYM_VOWELS:
             return acronym
+
+        # Reject if adjacent word (before or after, separated by a single space) is also ALL-CAPS.
+        # This handles proper names written in ALL-CAPS for emphasis, e.g. "ТОМАС ПЭЙН".
+        # Check word to the right
+        if s_end < len(text) and text[s_end] == " ":
+            rest = text[s_end + 1:]
+            if re.match(r"[А-ЯЁ]{2,}", rest):
+                return acronym
+        # Check word to the left
+        if s_start > 0 and text[s_start - 1] == " ":
+            prefix = text[:s_start - 1]
+            if re.search(r"[А-ЯЁ]{2,}$", prefix):
+                return acronym
 
         if _HAS_RUNORM:
             return self._expand_via_runorm(acronym)

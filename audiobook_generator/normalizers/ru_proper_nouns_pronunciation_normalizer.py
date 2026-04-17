@@ -212,13 +212,36 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
             "min_word_len": self.config.normalize_tsnorm_min_word_length or 2,
         }
 
+    def _apply_builtin_hints(self, text: str) -> str:
+        """Apply pronunciation and stress overrides deterministically (no LLM required).
+
+        Words that are present in the builtin stress/pronunciation hint tables are
+        corrected regardless of any stress marks that upstream normalizers may have
+        placed on them.  All other words are left untouched (including their accents).
+        """
+        # Pattern that includes combining diacritics so we can match e.g. "То́лстым" whole.
+        word_re = re.compile(
+            rf"[А-ЯЁа-яё][А-ЯЁа-яё{re.escape(COMBINING_ACUTE)}]*",
+            re.UNICODE,
+        )
+
+        def replace(match: re.Match[str]) -> str:
+            word = match.group(0)
+            bare = strip_combining_acute(word)
+            key = bare.lower()
+            # Check pronunciation override first (replaces the whole word)
+            if key in self.pronunciation_overrides:
+                replacement = self.pronunciation_overrides[key]
+                return preserve_case(bare, replacement)
+            # Then stress override
+            if key in self.stress_overrides:
+                replacement = self.stress_overrides[key]
+                return preserve_case(bare, normalize_stress_marks(replacement))
+            return word  # not in any hint table — keep as-is
+
+        return word_re.sub(replace, text)
+
     def normalize(self, text: str, chapter_title: str = "") -> str:
-        if not self.has_normalizer_llm():
-            logger.info(
-                "ru_proper_nouns_pronunciation skipped for chapter '%s': no LLM configured",
-                chapter_title,
-            )
-            return text
         if not is_russian_language(self.config.language):
             logger.info(
                 "proper_nouns_pronunciation_ru skipped for chapter '%s' because language is '%s'",
@@ -226,6 +249,15 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
                 self.config.language,
             )
             return text
+
+        if not self.has_normalizer_llm():
+            logger.info(
+                "ru_proper_nouns_pronunciation: builtin hints applied to chapter '%s', "
+                "LLM step skipped (no LLM configured)",
+                chapter_title,
+            )
+            # Apply deterministic hints even without LLM.
+            return self._apply_builtin_hints(text)
 
         units = self.plan_processing_units(text, chapter_title=chapter_title)
         processed_units = [
@@ -237,7 +269,9 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
             )
             for index, unit in enumerate(units, start=1)
         ]
-        return self.merge_processed_units(processed_units, chapter_title=chapter_title)
+        result = self.merge_processed_units(processed_units, chapter_title=chapter_title)
+        # Always enforce builtin hints as a final override over LLM choices.
+        return self._apply_builtin_hints(result)
 
     def plan_processing_units(self, text: str, chapter_title: str = "") -> list[str]:
         if not self.has_normalizer_llm():

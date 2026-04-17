@@ -549,6 +549,23 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
         self.assertNotIn("род. Человеческий", result)
         self.assertIn("род человеческий", result)
 
+    def test_short_exclamation_merged_without_double_punctuation(self):
+        """A short exclamative sentence like 'Увы!' merged with its predecessor
+        must NOT get a spurious period appended: 'Увы!.' is wrong.
+        Bug: rstrip('.') left '!' intact → f'...года. Увы!.' had double punctuation."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        text = (
+            "Обошёл бы полностью менее чем за два года. "
+            "Увы! "
+            "что это по сравнению с могучим океаном пространства и всемогущей силой Творца!"
+        )
+        result = normalizer.normalize(text)
+        self.assertNotIn("Увы!.", result,
+                         "'Увы!' must not have a spurious period appended when merged with prev sentence")
+        self.assertIn("Увы!", result, "'Увы!' must be preserved in output")
+
     def test_short_sentence_not_merged_with_next_long_sentence(self):
         """Short sentence like 'Или нет.' must be merged with the PREVIOUS sentence,
         not the next long one — to avoid producing a semantically incoherent chunk
@@ -658,6 +675,23 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
                          "'характера и в ложном' must not be split before 'И'")
         self.assertNotIn("Спустя тысячу семьсот", r2,
                          "'спустя тысячу семьсот' must not be capitalized from a wrong split")
+
+    def test_no_split_before_и_more_того(self):
+        """'рукописи, и более того' must NOT be split to 'рукописи. И более того'.
+        A comma before 'и более того' (adverbial phrase) must not trigger a split."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        text = (
+            'Тем, кто знаком с переводами Лантенаса, нет нужды напоминать, что он был слишком '
+            'буквальным переводчиком, чтобы отступать от лежавшей перед ним рукописи, и более того, '
+            'он не решился изменить её даже в одном случае, который будет рассмотрен далее, хотя это '
+            'изменение было явно необходимо.'
+        )
+        result = normalizer.normalize(text)
+        self.assertNotIn("рукописи. И более того", result,
+                         "'рукописи, и более того' must not be split into a new sentence")
+        self.assertIn("рукописи, и более того", result)
 
 
 class TestSharedNormalizerLLMSupport(unittest.TestCase):
@@ -953,14 +987,15 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
                 resolved_option_id=lambda: "guided",
             )
         }
-        result = normalizer.normalize("Томас Пейн писал эссе.")
+        # Use a proper noun NOT in builtin hints so LLM path is exercised
+        result = normalizer.normalize("В тексте о Наполеоне Бонапарте написано многое.")
         artifacts = normalizer.get_post_step_artifacts(
-            input_text="Томас Пейн писал эссе.",
+            input_text="В тексте о Наполеоне Бонапарте написано многое.",
             output_text=result,
             chapter_title="Test",
         )
         self.assertIn("changed_candidates", artifacts["93_selection_stats.json"])
-        self.assertIn("Томас Пейн", artifacts["92_selection_report.txt"])
+        self.assertIn("Наполеоне Бонапарте", artifacts["92_selection_report.txt"])
 
 
 class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
@@ -1328,6 +1363,30 @@ class TestAbbreviationsRuNormalizer(unittest.TestCase):
         from audiobook_generator.normalizers.ru_abbreviations_normalizer import AbbreviationsRuNormalizer
         self.assertEqual(normalize_step_name("ru_abbreviations"), AbbreviationsRuNormalizer.STEP_NAME)
 
+    def test_allcaps_multiword_name_not_letter_expanded(self):
+        """Two (or more) consecutive ALL-CAPS words form an emphasised proper name,
+        not an acronym sequence.  Bug: 'ТОМАС ПЭЙН' was expanded to
+        'тэ-о-эм-а-эс пэ-э-ий-эн'.  Neither word must be letter-expanded.
+        Note: ru_abbreviations runs before stress normalizers, so no combining
+        accents are present yet when this step fires."""
+        result = self.n.normalize("ТОМАС ПЭЙН написал трактат.")
+        self.assertNotIn("тэ-", result, "ТОМАС must not be letter-expanded when next to ПЭЙН")
+        self.assertNotIn("пэ-э", result, "ПЭЙН must not be letter-expanded when next to ТОМАС")
+        self.assertIn("ТОМАС", result)
+        self.assertIn("ПЭЙН", result)
+
+    def test_allcaps_multiword_name_not_letter_expanded_three_words(self):
+        """Three consecutive ALL-CAPS words: ЛЕВ НИКОЛАЕВИЧ ТОЛСТОЙ must not be expanded.
+        ЛЕВ has 1 vowel (≤ 2) so it would normally be expanded; the adjacent caps context saves it."""
+        result = self.n.normalize("ЛЕВ НИКОЛАЕВИЧ ТОЛСТОЙ жил в Ясной Поляне.")
+        self.assertNotIn("эл-е-вэ", result, "ЛЕВ must not be letter-expanded in multiword caps name")
+        self.assertIn("ЛЕВ", result)
+
+    def test_single_isolated_allcaps_acronym_still_expanded(self):
+        """A standalone 2-letter acronym like РФ must still be expanded."""
+        result = self.n.normalize("Конституция РФ определяет права.")
+        self.assertIn("эр-эф", result, "РФ must still be expanded when isolated")
+
 
 class TestLLMNormalizersGracefulSkip(unittest.TestCase):
     """LLM-based normalizers must not raise when no LLM is configured.
@@ -1368,11 +1427,24 @@ class TestLLMNormalizersGracefulSkip(unittest.TestCase):
         n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_llm_proper_nouns_pronunciation"))
         self.assertIsNotNone(n)
 
-    def test_ru_proper_nouns_pronunciation_normalize_returns_text_unchanged(self):
+    def test_ru_proper_nouns_pronunciation_normalize_applies_builtin_hints_without_llm(self):
         from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
         n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_llm_proper_nouns_pronunciation"))
-        text = "Томас Пейн написал трактат."
-        self.assertEqual(n.normalize(text), text)
+        # Builtin hint: "пейн" → "пэйн"; stress hint for "толстым" → "толсты́м"
+        result = n.normalize("Томас Пейн написал трактат.")
+        self.assertIn("Пэйн", result, "Builtin pronunciation hint must be applied even without LLM")
+
+    def test_ru_proper_nouns_pronunciation_applies_tolstym_stress_without_llm(self):
+        """BUILTIN_PROPER_NOUN_STRESS_HINTS must correct 'Толстым' even without LLM.
+        tsnorm may put stress on 'о' (То́лстым) for the adjective/noun interpretation;
+        the builtin hint enforces 'Толсты́м' (surname instrumental)."""
+        from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer, COMBINING_ACUTE
+        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_llm_proper_nouns_pronunciation"))
+        # Simulate tsnorm applying wrong stress to Толстым (stress on 'о')
+        wrong = f"То{COMBINING_ACUTE}лстым"
+        result = n.normalize(f"написанное {wrong}.")
+        self.assertIn(f"Толсты{COMBINING_ACUTE}м", result,
+                      "Stress on 'ы' must be enforced for surname 'Толстым'")
 
     def test_ru_proper_nouns_pronunciation_plan_units_returns_empty(self):
         from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer

@@ -25,8 +25,13 @@ PRIORITY_PATTERNS = (
     #    This is always the best split point — avoids breaking clauses mid-sentence.
     re.compile(r"(?<=[.!?])\s+(?=[А-ЯЁA-Z«\"])", re.UNICODE),
     re.compile(r"[;:](?=\s|$)"),
-    # Conjunctions after punctuation only — prevents splitting "Ветхого и Нового" (no comma)
-    re.compile(r"(?<=[,;])\s+(?=(?:и|а|но|однако)\b)", re.IGNORECASE),
+    # Conjunctions after punctuation only — prevents splitting "Ветхого и Нового" (no comma).
+    # Exclude "и" followed by adverbial particles ("и более того", "и даже", "и при этом" etc.)
+    re.compile(
+        r"(?<=[,;])\s+(?=(?:а|но|однако)\b)"
+        r"|(?<=[,;])\s+(?=и\s+(?!(?:более|даже|тем|при|всё|всего|ещё|только|притом|при этом)\b))",
+        re.IGNORECASE,
+    ),
     re.compile(r",\s+(?=(?:а также|однако|но|зато|поэтому|причем|притом|при этом|затем|потом)\b)", re.IGNORECASE),
     re.compile(
         r",\s+(?=(?:котор(?:ый|ая|ое|ые|ого|ому|ым|ых|ую|ой|ою)|обосновывающ\w*|существующ\w*|позволяющ\w*|делающ\w*|создающ\w*)\b)",
@@ -162,8 +167,13 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
                     and len(merged_sentences[-1]) + 1 + len(current) <= self.max_chars
                 ):
                     prev = merged_sentences.pop()
-                    base_curr = current.rstrip(".").rstrip()
-                    merged_sentences.append(f"{prev} {base_curr}.")
+                    # If the short sentence already ends with ! or ?, preserve it;
+                    # only strip trailing period (or nothing) before re-finalising.
+                    if current and current[-1] in "!?":
+                        merged_sentences.append(f"{prev} {current}")
+                    else:
+                        base_curr = current.rstrip(".").rstrip()
+                        merged_sentences.append(f"{prev} {base_curr}.")
                     i += 1
                 elif i + 1 < len(safe_sentences):
                     # Fall back to merge with NEXT
