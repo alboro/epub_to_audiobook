@@ -306,7 +306,7 @@ def handle_args():
         help=(
             "Comma-separated normalizer steps to apply in order. "
             "When set, --normalize_provider is ignored. "
-            "Example: simple_symbols,ru_initials,ru_numbers,ru_stress_words,ru_stress_ambiguity,tts_safe_split"
+            "Example: simple_symbols,ru_initials,ru_numbers,ru_llm_stress_ambiguity,ru_llm_proper_nouns_pronunciation,tts_llm_safe_split"
         ),
     )
     normalizer_group.add_argument(
@@ -376,10 +376,10 @@ def handle_args():
         ),
     )
     normalizer_group.add_argument(
-        "--normalize_stress_exceptions_file",
+        "--normalize_tts_pronunciation_overrides_words",
         help=(
-            "Optional UTF-8 file with per-line stress overrides in the form "
-            "'source==replacement'. Use this with ru_stress_words or ru_tsnorm."
+            "Inline TTS pronunciation overrides as 'word=replacement,word2=replacement2'. "
+            "Overrides the built-in defaults entirely when set."
         ),
     )
     normalizer_group.add_argument(
@@ -387,8 +387,16 @@ def handle_args():
         help=(
             "Optional UTF-8 file with per-line ambiguity variants in the form "
             "'source==variant1|variant2'. Variants may use combining acute accents or "
-            "Silero-style plus notation such as 'б+еды|бед+ы'. Use this with ru_stress_ambiguity."
+            "Silero-style plus notation such as 'б+едыбед+ы'. Use this with ru_llm_stress_ambiguity."
         ),
+    )
+    normalizer_group.add_argument(
+        "--normalize_stress_ambiguity_system_prompt",
+        help="Override the LLM system prompt for ru_llm_stress_ambiguity normalizer.",
+    )
+    normalizer_group.add_argument(
+        "--normalize_safe_split_system_prompt",
+        help="Override the LLM system prompt for tts_llm_safe_split normalizer.",
     )
     normalizer_group.add_argument(
         "--normalize_tsnorm_stress_yo",

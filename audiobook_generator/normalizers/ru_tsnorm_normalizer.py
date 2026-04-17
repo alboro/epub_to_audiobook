@@ -9,7 +9,6 @@ from audiobook_generator.normalizers.ru_text_utils import (
     is_russian_language,
     normalize_stress_marks,
 )
-from audiobook_generator.normalizers.ru_stress_words_normalizer import StressWordsRuNormalizer
 from audiobook_generator.normalizers.tsnorm_support import create_tsnorm_backend, load_tsnorm_backend
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,6 @@ class TSNormRuNormalizer(BaseNormalizer):
     STEP_NAME = "ru_tsnorm"
 
     def __init__(self, config: GeneralConfig):
-        self.stress_overrides = StressWordsRuNormalizer(config)
         self.backend = None
         super().__init__(config)
 
@@ -55,7 +53,6 @@ class TSNormRuNormalizer(BaseNormalizer):
         else:  # pragma: no cover - defensive compatibility path
             raise TypeError("tsnorm backend does not provide a callable or normalize() method")
         normalized = normalize_stress_marks(normalized)
-        normalized = self.stress_overrides.normalize(normalized, chapter_title=chapter_title)
         logger.info(
             "tsnorm_ru normalizer applied to chapter '%s': yo=%s, monosyllabic=%s, min_word_len=%s",
             chapter_title,

@@ -54,7 +54,6 @@ def _make_args(**kwargs):
         normalize_user_prompt_file=None, normalize_tts_safe_max_chars=None,
         normalize_tts_pronunciation_overrides_file=None,
         normalize_pronunciation_lexicon_db=None,
-        normalize_stress_exceptions_file=None, normalize_stress_ambiguity_file=None,
         normalize_tsnorm_stress_yo=None, normalize_tsnorm_stress_monosyllabic=None,
         normalize_tsnorm_min_word_length=None,
         normalize_stress_paradox_words=None, normalize_log_changes=None,

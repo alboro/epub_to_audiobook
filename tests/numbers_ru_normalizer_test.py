@@ -36,7 +36,6 @@ from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import (
     StressAmbiguityLLMNormalizer,
 )
 from audiobook_generator.normalizers.tts_safe_split_normalizer import TTSSafeSplitNormalizer
-from audiobook_generator.normalizers.ru_stress_words_normalizer import StressWordsRuNormalizer
 from audiobook_generator.normalizers.llm_support import (
     NormalizerLLMChoiceService,
     NormalizerLLMChoiceItem,
@@ -102,7 +101,6 @@ def make_config(**overrides):
         normalize_pronunciation_exceptions_file=None,
         normalize_tts_pronunciation_overrides_file=None,
         normalize_pronunciation_lexicon_db=None,
-        normalize_stress_exceptions_file=None,
         normalize_stress_ambiguity_file=None,
         normalize_tsnorm_stress_yo=True,
         normalize_tsnorm_stress_monosyllabic=False,
@@ -483,14 +481,14 @@ class TestDeterministicRuNormalizers(unittest.TestCase):
         normalizer = InitialsRuNormalizer(make_config(normalize_steps="ru_initials"))
         self.assertEqual(
             normalizer.normalize("вкратце о Е. Д. Калашниковой"),
-            "вкратце о Е-Дэ-Калашниковой",
+            "вкратце о Е Дэ Калашниковой",
         )
 
     def test_initials_ru_with_extra_spaces(self):
         normalizer = InitialsRuNormalizer(make_config(normalize_steps="ru_initials"))
         self.assertEqual(
             normalizer.normalize("вкратце о Е.   Д.   Калашниковой"),
-            "вкратце о Е-Дэ-Калашниковой",
+            "вкратце о Е Дэ Калашниковой",
         )
 
     def test_tts_pronunciation_overrides(self):
@@ -503,18 +501,12 @@ class TestDeterministicRuNormalizers(unittest.TestCase):
         )
 
     def test_stress_words_ru(self):
-        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="ru_stress_words"))
-        self.assertEqual(
-            normalizer.normalize("Это одно из чудес, а не все чудеса."),
-            "Это одно из чуде́с, а не все чудеса́.",
-        )
+        # Replaced by ru_tts_stress_paradox_guard — tested in ru_stress_paradox_guard_test.py
+        pass
 
     def test_stress_words_ru_leaves_ambiguous_word_unchanged(self):
-        normalizer = StressWordsRuNormalizer(make_config(normalize_steps="ru_stress_words"))
-        self.assertEqual(
-            normalizer.normalize("И после беды пришли новые беды."),
-            "И после беды пришли новые беды.",
-        )
+        # Replaced by ru_tts_stress_paradox_guard — tested in ru_stress_paradox_guard_test.py
+        pass
 
     def test_simple_symbols_aggressive_cleanup_preserves_letters_digits_and_stress(self):
         normalizer = SimpleSymbolsNormalizer(make_config(normalize_steps="simple_symbols"))
@@ -547,7 +539,7 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
     def test_avoids_single_word_tail_split(self):
         normalizer = TTSSafeSplitNormalizer(
             make_config(
-                normalize_steps="tts_safe_split",
+                normalize_steps="tts_llm_safe_split",
                 normalize_tts_safe_max_chars=160,
             )
         )
@@ -691,7 +683,7 @@ class TestSharedNormalizerLLMSupport(unittest.TestCase):
 
 class TestProperNounsRuNormalizer(unittest.TestCase):
     def test_accents_internal_proper_nouns(self):
-        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_nouns"))
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_names"))
         normalizer.backend = lambda text: {
             "Фицджеральда": "Фицджера́льда",
             "Калашниковой": "Кала́шниковой",
@@ -703,7 +695,7 @@ class TestProperNounsRuNormalizer(unittest.TestCase):
         )
 
     def test_skips_sentence_start_words(self):
-        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_nouns"))
+        normalizer = ProperNounsRuNormalizer(make_config(normalize_steps="ru_proper_names"))
         normalizer.backend = lambda text: text + COMBINING_ACUTE
         self.assertEqual(
             normalizer.normalize("Для ясности автор этой книжки не лингвист. Но Фицджеральда он помнит."),
@@ -715,7 +707,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_builds_pronunciation_variants_and_applies_selected_options(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="ru_proper_nouns_pronunciation",
+                normalize_steps="ru_llm_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -744,7 +736,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_prompt_artifacts_include_context_and_options(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="ru_proper_nouns_pronunciation",
+                normalize_steps="ru_llm_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -763,7 +755,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_skips_generic_leading_sentence_word_in_candidate(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="ru_proper_nouns_pronunciation",
+                normalize_steps="ru_llm_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -781,7 +773,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_collapses_double_stress_marks_from_backend(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="ru_proper_nouns_pronunciation",
+                normalize_steps="ru_llm_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -797,7 +789,7 @@ class TestProperNounsPronunciationRuNormalizer(unittest.TestCase):
     def test_post_step_artifacts_include_selection_stats(self):
         normalizer = ProperNounsPronunciationRuNormalizer(
             make_config(
-                normalize_steps="ru_proper_nouns_pronunciation",
+                normalize_steps="ru_llm_proper_nouns_pronunciation",
                 normalize_base_url="http://127.0.0.1:1234/v1",
             )
         )
@@ -848,7 +840,7 @@ class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
             )
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
-                    normalize_steps="ru_stress_ambiguity",
+                    normalize_steps="ru_llm_stress_ambiguity",
                     normalize_base_url="http://127.0.0.1:1234/v1",
                     normalize_pronunciation_lexicon_db=str(db_path),
                 )
@@ -897,7 +889,7 @@ class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
             )
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
-                    normalize_steps="ru_stress_ambiguity",
+                    normalize_steps="ru_llm_stress_ambiguity",
                     normalize_base_url="http://127.0.0.1:1234/v1",
                     normalize_pronunciation_lexicon_db=str(db_path),
                 )
@@ -933,7 +925,7 @@ class TestStressAmbiguityLLMNormalizer(unittest.TestCase):
             )
             normalizer = StressAmbiguityLLMNormalizer(
                 make_config(
-                    normalize_steps="ru_stress_ambiguity",
+                    normalize_steps="ru_llm_stress_ambiguity",
                     normalize_base_url="http://127.0.0.1:1234/v1",
                     normalize_pronunciation_lexicon_db=str(db_path),
                 )
@@ -1168,18 +1160,18 @@ class TestLLMNormalizersGracefulSkip(unittest.TestCase):
     def test_ru_stress_ambiguity_constructs_without_llm(self):
         from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import StressAmbiguityLLMNormalizer
         # Must NOT raise
-        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_stress_ambiguity"))
+        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_llm_stress_ambiguity"))
         self.assertIsNotNone(n)
 
     def test_ru_stress_ambiguity_normalize_returns_text_unchanged(self):
         from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import StressAmbiguityLLMNormalizer
-        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_stress_ambiguity"))
+        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_llm_stress_ambiguity"))
         text = "Если вспомнить нравственное уродство."
         self.assertEqual(n.normalize(text), text)
 
     def test_ru_stress_ambiguity_plan_units_returns_empty(self):
         from audiobook_generator.normalizers.ru_stress_ambiguity_normalizer import StressAmbiguityLLMNormalizer
-        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_stress_ambiguity"))
+        n = StressAmbiguityLLMNormalizer(self._no_llm_config("ru_llm_stress_ambiguity"))
         units = n.plan_processing_units("Текст главы.")
         self.assertEqual(units, [])
 
@@ -1187,18 +1179,18 @@ class TestLLMNormalizersGracefulSkip(unittest.TestCase):
 
     def test_ru_proper_nouns_pronunciation_constructs_without_llm(self):
         from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
-        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_proper_nouns_pronunciation"))
+        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_llm_proper_nouns_pronunciation"))
         self.assertIsNotNone(n)
 
     def test_ru_proper_nouns_pronunciation_normalize_returns_text_unchanged(self):
         from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
-        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_proper_nouns_pronunciation"))
+        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_llm_proper_nouns_pronunciation"))
         text = "Томас Пейн написал трактат."
         self.assertEqual(n.normalize(text), text)
 
     def test_ru_proper_nouns_pronunciation_plan_units_returns_empty(self):
         from audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer import ProperNounsPronunciationRuNormalizer
-        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_proper_nouns_pronunciation"))
+        n = ProperNounsPronunciationRuNormalizer(self._no_llm_config("ru_llm_proper_nouns_pronunciation"))
         units = n.plan_processing_units("Текст.")
         self.assertEqual(units, [])
 
@@ -1221,7 +1213,7 @@ class TestLLMNormalizersGracefulSkip(unittest.TestCase):
         """Full chain including LLM steps must not raise and must return text."""
         from audiobook_generator.normalizers.base_normalizer import get_normalizer
         config = self._no_llm_config(
-            "simple_symbols,ru_stress_ambiguity,ru_proper_nouns_pronunciation"
+            "simple_symbols,ru_llm_stress_ambiguity,ru_llm_proper_nouns_pronunciation"
         )
         config.normalize = True
         normalizer = get_normalizer(config)

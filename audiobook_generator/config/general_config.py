@@ -80,12 +80,13 @@ class GeneralConfig:
             or getattr(args, 'normalize_pronunciation_exceptions_file', None)
         )
         self.normalize_pronunciation_exceptions_file = self.normalize_tts_pronunciation_overrides_file
+        self.normalize_tts_pronunciation_overrides_words = getattr(
+            args, 'normalize_tts_pronunciation_overrides_words', None
+        )
         self.normalize_pronunciation_lexicon_db = getattr(
             args, 'normalize_pronunciation_lexicon_db', None
         )
-        self.normalize_stress_exceptions_file = getattr(
-            args, 'normalize_stress_exceptions_file', None
-        )
+        # normalize_stress_exceptions_file: removed (replaced by normalize_stress_paradox_words)
         self.normalize_stress_ambiguity_file = getattr(
             args, 'normalize_stress_ambiguity_file', None
         )
@@ -100,6 +101,12 @@ class GeneralConfig:
             args, 'normalize_stress_paradox_words', None
         )
         self.normalize_log_changes = getattr(args, 'normalize_log_changes', None)
+        self.normalize_stress_ambiguity_system_prompt = getattr(
+            args, 'normalize_stress_ambiguity_system_prompt', None
+        )
+        self.normalize_safe_split_system_prompt = getattr(
+            args, 'normalize_safe_split_system_prompt', None
+        )
 
         # TTS provider: Azure & Edge TTS specific arguments
         self.break_duration = getattr(args, 'break_duration', None)

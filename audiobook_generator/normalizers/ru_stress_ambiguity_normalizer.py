@@ -31,9 +31,7 @@ logger = logging.getLogger(__name__)
 
 AMBIGUOUS_WORD_PATTERN = re.compile(rf"[А-Яа-яЁё{COMBINING_ACUTE}-]+")
 
-STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT = (
-    DEFAULT_CHOICE_SYSTEM_PROMPT
-    + """
+_DEFAULT_STRESS_AMBIGUITY_EXTRA = """
 
 Additional rules for this task:
 - The target language is Russian text-to-speech.
@@ -44,7 +42,16 @@ Additional rules for this task:
 - Leave the original option if the context is insufficient or the pronunciation is not clearly determined.
 - Set cacheable to true only if the best choice is stable for the same source_text regardless of wider context.
 - Do not rewrite surrounding context. Only choose among the provided options for the highlighted source_text unless a clearly better custom_text is necessary."""
-)
+
+STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT = DEFAULT_CHOICE_SYSTEM_PROMPT + _DEFAULT_STRESS_AMBIGUITY_EXTRA
+
+
+def _get_stress_ambiguity_prompt(config) -> str:
+    """Return the system prompt for stress ambiguity selection, from config or default."""
+    custom = getattr(config, "normalize_stress_ambiguity_system_prompt", None)
+    if custom and isinstance(custom, str):
+        return custom
+    return STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT
 
 
 @dataclass(frozen=True)
@@ -68,7 +75,7 @@ class StressAmbiguityCandidate:
 
 
 class StressAmbiguityLLMNormalizer(BaseNormalizer):
-    STEP_NAME = "ru_stress_ambiguity"
+    STEP_NAME = "ru_llm_stress_ambiguity"
     STEP_VERSION = 3
 
     def __init__(self, config: GeneralConfig):
@@ -88,7 +95,7 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
     def validate_config(self):
         if not self.has_normalizer_llm():
             logger.warning(
-                "ru_stress_ambiguity: no LLM configured — step will be skipped. "
+                "ru_llm_stress_ambiguity: no LLM configured — step will be skipped. "
                 "Set normalize_base_url / normalize_api_key to enable it."
             )
 
@@ -103,7 +110,7 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
             "model": llm.settings.model,
             "base_url": llm.settings.base_url,
             "max_chars": llm.settings.max_chars,
-            "choice_system_prompt": STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            "choice_system_prompt": _get_stress_ambiguity_prompt(self.config),
             "pronunciation_lexicon_db": str(self.lexicon_db.path) if self.lexicon_db else None,
             "pronunciation_lexicon_sources": (
                 self._load_built_sources(self.lexicon_db) if self.lexicon_db else []
@@ -116,13 +123,13 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
     def normalize(self, text: str, chapter_title: str = "") -> str:
         if not self.has_normalizer_llm():
             logger.info(
-                "ru_stress_ambiguity skipped for chapter '%s': no LLM configured",
+                "ru_llm_stress_ambiguity skipped for chapter '%s': no LLM configured",
                 chapter_title,
             )
             return text
         if not is_russian_language(self.config.language):
             logger.info(
-                "stress_ambiguity_llm skipped for chapter '%s' because language is '%s'",
+                "ru_llm_stress_ambiguity skipped for chapter '%s' because language is '%s'",
                 chapter_title,
                 self.config.language,
             )
@@ -159,7 +166,7 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
         self._last_selections = {}
         batches = self.choice_service.plan_batches(
             [candidate.to_choice_item() for candidate in candidates],
-            system_prompt=STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            system_prompt=_get_stress_ambiguity_prompt(self.config),
         )
         return [self._serialize_batch(batch) for batch in batches]
 
@@ -182,7 +189,7 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
         selections = self.choice_service.choose_batch(
             batch,
             target_language=self.config.language,
-            system_prompt=STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            system_prompt=_get_stress_ambiguity_prompt(self.config),
             model=self.config.normalize_model,
             temperature=0,
         )
@@ -273,9 +280,9 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
             for candidate in candidates
         ]
         return {
-            "00_choice_system_prompt.txt": STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            "00_choice_system_prompt.txt": _get_stress_ambiguity_prompt(self.config),
             "01_choice_settings.json": self.choice_service.render_settings_json(
-                system_prompt=STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+                system_prompt=_get_stress_ambiguity_prompt(self.config),
             ),
             "02_candidates.json": json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
             "03_pronunciation_lexicon.json": json.dumps(
@@ -401,7 +408,7 @@ class StressAmbiguityLLMNormalizer(BaseNormalizer):
     ) -> dict[str, str]:
         batch = self._deserialize_batch(unit)
         return {
-            "00_choice_system_prompt.txt": STRESS_AMBIGUITY_CHOICE_SYSTEM_PROMPT,
+            "00_choice_system_prompt.txt": _get_stress_ambiguity_prompt(self.config),
             "01_choice_user_prompt.txt": self.choice_service.render_user_prompt(
                 batch,
                 target_language=self.config.language,

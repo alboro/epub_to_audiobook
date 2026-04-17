@@ -103,9 +103,11 @@ FIELD_SECTIONS: Dict[str, str] = {
     "normalize_user_prompt_file": "normalize",
     "normalize_tts_safe_max_chars": "normalize",
     "normalize_tts_pronunciation_overrides_file": "normalize",
+    "normalize_tts_pronunciation_overrides_words": "normalize",
     "normalize_pronunciation_lexicon_db": "normalize",
-    "normalize_stress_exceptions_file": "normalize",
     "normalize_stress_ambiguity_file": "normalize",
+    "normalize_stress_ambiguity_system_prompt": "normalize",
+    "normalize_safe_split_system_prompt": "normalize",
     "normalize_tsnorm_stress_yo": "normalize",
     "normalize_tsnorm_stress_monosyllabic": "normalize",
     "normalize_tsnorm_min_word_length": "normalize",
@@ -125,7 +127,7 @@ BOOL_FIELDS = {
     "normalize", "normalize_log_changes",
     "openai_enable_polling",
     "normalize_tsnorm_stress_yo", "normalize_tsnorm_stress_monosyllabic",
-    "qwen_stream", "package_m4b",
+    "qwen_stream", "package_m4b", "chunked_audio",
 }
 
 

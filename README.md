@@ -103,8 +103,6 @@ Configure via `normalize_steps` in INI or `--normalize_steps` CLI flag.
 | `remove_reference_numbers` | Removes bracketed references like `[3]` or `[12.1]` |
 | `ru_initials` | Rewrites Russian initials into XTTS-friendly spoken forms |
 | `ru_abbreviations` | Expands common Russian abbreviations |
-| `tts_pronunciation_overrides` | Applies TTS-specific overrides for known problem words |
-| `ru_stress_words` | Adds stress marks for curated list of frequently mispronounced words |
 | `ru_stress_ambiguity`     | Sends only true homographs to LLM for contextual stress disambiguation |
 | `ru_proper_nouns`         | Adds stress marks to likely proper nouns using tsnorm |
 | `ru_proper_nouns_pronunciation` | Asks LLM to choose TTS-safe pronunciation for proper names |

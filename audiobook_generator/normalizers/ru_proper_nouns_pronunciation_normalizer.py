@@ -143,7 +143,7 @@ class ProperNounCandidate:
 
 
 class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
-    STEP_NAME = "ru_proper_nouns_pronunciation"
+    STEP_NAME = "ru_llm_proper_nouns_pronunciation"
     STEP_VERSION = 2
 
     def __init__(self, config: GeneralConfig):
@@ -162,7 +162,7 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
             {
                 strip_combining_acute(source).lower(): replacement
                 for source, replacement in load_mapping_file(
-                    config.normalize_stress_exceptions_file
+                    getattr(config, "normalize_stress_exceptions_file", None)
                 ).items()
             }
         )

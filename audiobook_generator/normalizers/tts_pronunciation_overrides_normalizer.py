@@ -13,6 +13,8 @@ from audiobook_generator.normalizers.ru_text_utils import (
 
 logger = logging.getLogger(__name__)
 
+# Default overrides kept as reference — override via normalize_tts_pronunciation_overrides_words in config.
+# Format: "word=replacement,word2=replacement2" (comma-separated).
 BUILTIN_TTS_PRONUNCIATION_OVERRIDES: dict[str, str] = {
     "отель": "отэль",
     "отеля": "отэля",
@@ -27,11 +29,34 @@ BUILTIN_TTS_PRONUNCIATION_OVERRIDES: dict[str, str] = {
 }
 
 
+def _parse_inline_overrides(raw: str | None) -> dict[str, str]:
+    """Parse 'word=replacement,word2=replacement2' config string into a dict."""
+    if not raw:
+        return {}
+    result = {}
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if "=" in pair:
+            src, _, rep = pair.partition("=")
+            src, rep = src.strip().lower(), rep.strip()
+            if src and rep:
+                result[src] = rep
+    return result
+
+
 class TTSPronunciationOverridesNormalizer(BaseNormalizer):
     STEP_NAME = "tts_pronunciation_overrides"
 
     def __init__(self, config: GeneralConfig):
-        self.replacements = BUILTIN_TTS_PRONUNCIATION_OVERRIDES.copy()
+        inline_raw = getattr(config, "normalize_tts_pronunciation_overrides_words", None)
+        inline_overrides = _parse_inline_overrides(inline_raw)
+        if inline_overrides:
+            # If inline config is provided, use ONLY those (user takes full control)
+            self.replacements = inline_overrides
+        else:
+            # Fall back to builtin defaults
+            self.replacements = BUILTIN_TTS_PRONUNCIATION_OVERRIDES.copy()
+        # Always merge with file-based overrides on top
         self.replacements.update(
             {
                 source.lower(): replacement

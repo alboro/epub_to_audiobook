@@ -27,7 +27,7 @@ BUILTIN_STRESS_OVERRIDES = {
     "крылом": "крылОм",
 }
 
-
+""" deprecated """
 class StressWordsRuNormalizer(BaseNormalizer):
     STEP_NAME = "ru_stress_words"
 

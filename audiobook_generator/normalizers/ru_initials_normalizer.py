@@ -78,5 +78,5 @@ class InitialsRuNormalizer(BaseNormalizer):
 
     def _replace_match(self, match: re.Match[str]) -> str:
         initials = re.findall(r"[А-ЯЁ]", match.group("initials"))
-        spoken_initials = "-".join(RUSSIAN_LETTER_NAMES.get(letter, letter) for letter in initials)
+        spoken_initials = " ".join(RUSSIAN_LETTER_NAMES.get(letter, letter) for letter in initials)
         return f"{spoken_initials}-{match.group('surname')}"

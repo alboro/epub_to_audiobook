@@ -162,6 +162,56 @@ class TestParadoxGuardEmptyList(unittest.TestCase):
         self.assertEqual(candidates, self.guard.filter_candidates(candidates))
 
 
+class TestParadoxGuardStressEnforcement(unittest.TestCase):
+    """
+    Covers the case where a word WITH a stress mark is in config (e.g. 'чуде́с'):
+    - text 'чудес' (no stress) → should be replaced with 'чуде́с'
+    - morphological forms like 'чудеса' are also detected as paradox words
+    """
+
+    def setUp(self):
+        # Both forms from config.local.ini
+        self.guard = TTSStressParadoxGuard(["чуде́с", "чудеса́"])
+
+    def test_base_form_detected(self):
+        self.assertTrue(self.guard.is_paradox_word("чудес"))
+
+    def test_base_form_with_stress_detected(self):
+        self.assertTrue(self.guard.is_paradox_word("чуде" + COMBINING_ACUTE + "с"))
+
+    def test_apply_adds_stress_to_unstressed_form(self):
+        """'чудес' (no stress) → guard enforces 'чуде́с'."""
+        text = "рассказывал о чудес и дивах"
+        result = self.guard.apply_paradox_overrides(text)
+        self.assertIn("чуде" + COMBINING_ACUTE + "с", result)
+
+    def test_apply_corrects_wrong_stress(self):
+        """'чудЕс' with wrong stress → guard enforces correct 'чуде́с'."""
+        wrong = "чуде" + COMBINING_ACUTE + "с"  # same as canonical, actually correct here
+        text = f"о {wrong}"
+        result = self.guard.apply_paradox_overrides(text)
+        self.assertIn("чуде" + COMBINING_ACUTE + "с", result)
+
+    def test_chudesa_is_paradox_word(self):
+        """'чудеса' expands as morphological form of 'чудес' → detected."""
+        self.assertTrue(self.guard.is_paradox_word("чудеса"))
+
+    def test_chudesa_stress_enforced(self):
+        """'чудеса' in text → guard enforces 'чудеса́' (from separate config entry)."""
+        text = "одно из чудеса природы"
+        result = self.guard.apply_paradox_overrides(text)
+        self.assertIn("чудеса" + COMBINING_ACUTE, result)
+
+    def test_filter_candidates_excludes_chudes(self):
+        candidates = {
+            "чудес": ["чуде" + COMBINING_ACUTE + "с", "чу" + COMBINING_ACUTE + "дес"],
+            "слово": ["сло" + COMBINING_ACUTE + "во"],
+        }
+        filtered = self.guard.filter_candidates(candidates)
+        self.assertNotIn("чудес", filtered)
+        self.assertIn("слово", filtered)
+
+
 class TestParadoxGuardFromConfig(unittest.TestCase):
     """Test the from_config() factory that parses a comma-separated INI value."""
 

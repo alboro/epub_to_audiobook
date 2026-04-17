@@ -90,7 +90,7 @@ INITIALS_BEFORE_PATTERN = re.compile(r"(?:\b[А-ЯЁ]\.\s*){1,3}$")
 
 
 class ProperNounsRuNormalizer(BaseNormalizer):
-    STEP_NAME = "ru_proper_nouns"
+    STEP_NAME = "ru_proper_names"
 
     def __init__(self, config: GeneralConfig):
         self.backend = None

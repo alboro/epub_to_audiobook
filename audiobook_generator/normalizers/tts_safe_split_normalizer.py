@@ -33,8 +33,28 @@ PRIORITY_PATTERNS = (
 )
 
 
+_DEFAULT_SAFE_SPLIT_SYSTEM_PROMPT = (
+    "You are a text-to-speech pre-processor. "
+    "You receive a JSON list of sentences that have been algorithmically split for TTS. "
+    "Your task: review punctuation and improve natural speech flow where needed. "
+    "Rules:\n"
+    "- Keep the content and meaning unchanged.\n"
+    "- Only adjust punctuation marks (commas, dashes, semicolons, colons).\n"
+    "- Do NOT merge or split sentences.\n"
+    "- Return a JSON array of the same number of strings, in the same order.\n"
+    "- If no change is needed for a sentence, return it as-is."
+)
+
+
+def _get_safe_split_prompt(config) -> str:
+    custom = getattr(config, "normalize_safe_split_system_prompt", None)
+    if custom and isinstance(custom, str):
+        return custom
+    return _DEFAULT_SAFE_SPLIT_SYSTEM_PROMPT
+
+
 class TTSSafeSplitNormalizer(BaseNormalizer):
-    STEP_NAME = "tts_safe_split"
+    STEP_NAME = "tts_llm_safe_split"
 
     def __init__(self, config: GeneralConfig):
         self.max_chars = config.normalize_tts_safe_max_chars or DEFAULT_SAFE_MAX_CHARS
@@ -69,7 +89,43 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
             inserted_splits,
             self.max_chars,
         )
-        return "".join(normalized_parts).strip()
+        result = "".join(normalized_parts).strip()
+        result = self._llm_refine(result, chapter_title=chapter_title)
+        return result
+
+    def _llm_refine(self, text: str, *, chapter_title: str = "") -> str:
+        """Optional LLM pass to refine punctuation in split sentences."""
+        if not self.has_normalizer_llm():
+            return text
+        sentences = [s for s in re.split(r"(?<=[.!?]) +", text) if s.strip()]
+        if not sentences:
+            return text
+        try:
+            llm = self.get_normalizer_llm()
+            import json as _json
+            prompt = _json.dumps(sentences, ensure_ascii=False)
+            system_prompt = _get_safe_split_prompt(self.config)
+            response = llm.complete(
+                prompt,
+                system_prompt=system_prompt,
+                model=self.config.normalize_model,
+                temperature=0,
+            )
+            refined = _json.loads(response.strip())
+            if isinstance(refined, list) and len(refined) == len(sentences):
+                logger.info(
+                    "TTS safe split LLM refinement applied to chapter '%s': %s sentences",
+                    chapter_title,
+                    len(refined),
+                )
+                return " ".join(s.strip() for s in refined if s.strip())
+        except Exception as exc:
+            logger.warning(
+                "TTS safe split LLM refinement skipped for chapter '%s': %s",
+                chapter_title,
+                exc,
+            )
+        return text
 
     def _normalize_paragraph(self, paragraph: str) -> tuple[str, int, int]:
         compact = re.sub(r"\s+", " ", paragraph).strip()

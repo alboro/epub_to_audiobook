@@ -10,21 +10,29 @@ from audiobook_generator.config.general_config import GeneralConfig
 # e.g. "ru_tsnorm" ↔ ru_tsnorm_normalizer.py ↔ TSNormRuNormalizer.STEP_NAME
 # ---------------------------------------------------------------------------
 NORMALIZER_REGISTRY: dict[str, tuple[str, str]] = {
-    # key                               module (relative)                                   class
-    "openai":                          ("audiobook_generator.normalizers.openai_normalizer",                              "OpenAINormalizer"),
-    "simple_symbols":                  ("audiobook_generator.normalizers.simple_symbols_normalizer",                      "SimpleSymbolsNormalizer"),
-    "tts_safe_split":                  ("audiobook_generator.normalizers.tts_safe_split_normalizer",                      "TTSSafeSplitNormalizer"),
-    "tts_pronunciation_overrides":     ("audiobook_generator.normalizers.tts_pronunciation_overrides_normalizer",         "TTSPronunciationOverridesNormalizer"),
-    "ru_initials":                     ("audiobook_generator.normalizers.ru_initials_normalizer",                         "InitialsRuNormalizer"),
-    "ru_numbers":                      ("audiobook_generator.normalizers.ru_numbers_normalizer",                          "NumbersRuNormalizer"),
-    "ru_abbreviations":                ("audiobook_generator.normalizers.ru_abbreviations_normalizer",                    "AbbreviationsRuNormalizer"),
-    "ru_stress_words":                 ("audiobook_generator.normalizers.ru_stress_words_normalizer",                     "StressWordsRuNormalizer"),
-    "ru_stress_ambiguity":             ("audiobook_generator.normalizers.ru_stress_ambiguity_normalizer",                 "StressAmbiguityLLMNormalizer"),
-    "ru_proper_nouns":                 ("audiobook_generator.normalizers.ru_proper_nouns_normalizer",                     "ProperNounsRuNormalizer"),
-    "ru_proper_nouns_pronunciation":   ("audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer",       "ProperNounsPronunciationRuNormalizer"),
-    "ru_tsnorm":                       ("audiobook_generator.normalizers.ru_tsnorm_normalizer",                           "TSNormRuNormalizer"),
-    "remove_endnotes":                 ("audiobook_generator.normalizers.remove_endnotes_normalizer",                     "RemoveEndnotesNormalizer"),
-    "remove_reference_numbers":        ("audiobook_generator.normalizers.remove_reference_numbers_normalizer",            "RemoveReferenceNumbersNormalizer"),
+    # key                                    module (relative)                                                   class
+    "openai":                               ("audiobook_generator.normalizers.openai_normalizer",                              "OpenAINormalizer"),
+    "simple_symbols":                       ("audiobook_generator.normalizers.simple_symbols_normalizer",                      "SimpleSymbolsNormalizer"),
+    # tts_llm_safe_split: algorithmic split + optional LLM punctuation refinement
+    "tts_llm_safe_split":                   ("audiobook_generator.normalizers.tts_safe_split_normalizer",                      "TTSSafeSplitNormalizer"),
+    "tts_pronunciation_overrides":          ("audiobook_generator.normalizers.tts_pronunciation_overrides_normalizer",         "TTSPronunciationOverridesNormalizer"),
+    "ru_initials":                          ("audiobook_generator.normalizers.ru_initials_normalizer",                         "InitialsRuNormalizer"),
+    "ru_numbers":                           ("audiobook_generator.normalizers.ru_numbers_normalizer",                          "NumbersRuNormalizer"),
+    "ru_abbreviations":                     ("audiobook_generator.normalizers.ru_abbreviations_normalizer",                    "AbbreviationsRuNormalizer"),
+    # ru_llm_stress_ambiguity: LLM-assisted homograph stress resolution
+    "ru_llm_stress_ambiguity":              ("audiobook_generator.normalizers.ru_stress_ambiguity_normalizer",                 "StressAmbiguityLLMNormalizer"),
+    # ru_proper_names: deterministic capitalised-word stress via tsnorm backend
+    "ru_proper_names":                      ("audiobook_generator.normalizers.ru_proper_nouns_normalizer",                     "ProperNounsRuNormalizer"),
+    # ru_llm_proper_nouns_pronunciation: LLM-assisted proper-name pronunciation selection
+    "ru_llm_proper_nouns_pronunciation":    ("audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer",       "ProperNounsPronunciationRuNormalizer"),
+    "ru_tsnorm":                            ("audiobook_generator.normalizers.ru_tsnorm_normalizer",                           "TSNormRuNormalizer"),
+    "remove_endnotes":                      ("audiobook_generator.normalizers.remove_endnotes_normalizer",                     "RemoveEndnotesNormalizer"),
+    "remove_reference_numbers":             ("audiobook_generator.normalizers.remove_reference_numbers_normalizer",            "RemoveReferenceNumbersNormalizer"),
+    # ── Deprecated aliases (kept for backward compatibility, will be removed in a future version) ──
+    "tts_safe_split":                       ("audiobook_generator.normalizers.tts_safe_split_normalizer",                      "TTSSafeSplitNormalizer"),
+    "ru_stress_ambiguity":                  ("audiobook_generator.normalizers.ru_stress_ambiguity_normalizer",                 "StressAmbiguityLLMNormalizer"),
+    "ru_proper_nouns":                      ("audiobook_generator.normalizers.ru_proper_nouns_normalizer",                     "ProperNounsRuNormalizer"),
+    "ru_proper_nouns_pronunciation":        ("audiobook_generator.normalizers.ru_proper_nouns_pronunciation_normalizer",       "ProperNounsPronunciationRuNormalizer"),
 }
 
 
@@ -189,18 +197,36 @@ def _resolve_normalizer_steps(config: GeneralConfig) -> List[str]:
     return [normalize_step_name(config.normalize_provider or "openai")]
 
 
+_DEPRECATED_STEP_ALIASES = {
+    "tts_safe_split": "tts_llm_safe_split",
+    "ru_stress_ambiguity": "ru_llm_stress_ambiguity",
+    "ru_proper_nouns": "ru_proper_names",
+    "ru_proper_nouns_pronunciation": "ru_llm_proper_nouns_pronunciation",
+}
+
+import logging as _logging
+_reg_logger = _logging.getLogger(__name__)
+
+
 def normalize_step_name(step: str) -> str:
     """Resolve a step name to its canonical form.
 
     The canonical name is the key in NORMALIZER_REGISTRY, which equals the
     STEP_NAME constant defined on the corresponding normalizer class.
-    Raises ValueError for unknown names — no aliases accepted.
+    Deprecated aliases are accepted with a warning.
+    Raises ValueError for unknown names.
     """
     key = step.strip().lower()
+    if key in _DEPRECATED_STEP_ALIASES:
+        new_key = _DEPRECATED_STEP_ALIASES[key]
+        _reg_logger.warning(
+            "Normalizer step '%s' is deprecated; use '%s' instead.", key, new_key
+        )
+        return new_key
     if key not in NORMALIZER_REGISTRY:
         raise ValueError(
             f"Unknown normalizer step: '{step}'. "
-            f"Valid steps: {', '.join(sorted(NORMALIZER_REGISTRY))}"
+            f"Valid steps: {', '.join(sorted(k for k in NORMALIZER_REGISTRY if k not in _DEPRECATED_STEP_ALIASES))}"
         )
     return key
 
