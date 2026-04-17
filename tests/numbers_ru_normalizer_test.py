@@ -549,6 +549,22 @@ class TestTTSSafeSplitNormalizer(unittest.TestCase):
         self.assertNotIn("род. Человеческий", result)
         self.assertIn("род человеческий", result)
 
+    def test_short_exclamation_at_start_merged_forward_preserves_mark(self):
+        """A short exclamative sentence at paragraph start ('Хм!') has no previous sentence
+        to merge into, so it gets merged FORWARD with the next sentence.
+        The '!' must NOT be stripped: 'Хм Об этом...' is wrong; 'Хм! Об этом...' is correct."""
+        normalizer = TTSSafeSplitNormalizer(
+            make_config(normalize_steps="tts_llm_safe_split", normalize_tts_safe_max_chars=180)
+        )
+        text = (
+            "Хм! "
+            "Об этом автор Паралипоменон, как ни чудесна эта история, не упоминает вовсе, "
+            "хотя Илью по имени называет."
+        )
+        result = normalizer.normalize(text)
+        self.assertIn("Хм!", result, "'Хм!' exclamation mark must be preserved when merged forward")
+        self.assertNotIn("Хм Об", result, "'Хм' must not lose its '!' when merged with next sentence")
+
     def test_short_exclamation_merged_without_double_punctuation(self):
         """A short exclamative sentence like 'Увы!' merged with its predecessor
         must NOT get a spurious period appended: 'Увы!.' is wrong.

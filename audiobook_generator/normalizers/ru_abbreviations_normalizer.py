@@ -97,7 +97,8 @@ _ABBREV_TABLE: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bмлрд\.", re.IGNORECASE), "миллиардов"),
     # Publication-related
     (re.compile(r"\bизд\.", re.IGNORECASE), "издание"),
-    (re.compile(r"\bл\.", re.IGNORECASE), "лист"),   # only when clearly an abbreviation
+    # "л." (лист) is ONLY expanded after a digit to avoid false positives like "Самуил." → "Самуилист"
+    (re.compile(r"(?<=\d)\s*л\.", re.IGNORECASE), " листов"),
 ]
 
 

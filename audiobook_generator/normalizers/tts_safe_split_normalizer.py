@@ -178,8 +178,11 @@ class TTSSafeSplitNormalizer(BaseNormalizer):
                 elif i + 1 < len(safe_sentences):
                     # Fall back to merge with NEXT
                     next_sent = safe_sentences[i + 1]
-                    base = current.rstrip(".!?").rstrip()
-                    merged_sentences.append(f"{base} {next_sent}")
+                    if current and current[-1] in "!?":
+                        merged_sentences.append(f"{current} {next_sent}")
+                    else:
+                        base = current.rstrip(".").rstrip()
+                        merged_sentences.append(f"{base} {next_sent}")
                     i += 2
                 else:
                     merged_sentences.append(current)
