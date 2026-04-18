@@ -52,7 +52,7 @@ def make_chapter_key(title, idx) -> str:
 def make_safe_filename(
     title, idx, output_dir, ext, reserve=16, collision_check=True
 ):
-    """
+     """
     Build filesystem-safe filename for given title and chapter index.
 
     - Uses NAME_MAX (if available) for output_dir.
