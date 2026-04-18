@@ -225,16 +225,21 @@ class AbbreviationsRuNormalizer(BaseNormalizer):
         if vowel_count > _MAX_ACRONYM_VOWELS:
             return acronym
 
-        # Reject if adjacent word (before or after, separated by a single space) is also ALL-CAPS.
-        # This handles proper names written in ALL-CAPS for emphasis, e.g. "ТОМАС ПЭЙН".
-        # Check word to the right
-        if s_end < len(text) and text[s_end] == " ":
-            rest = text[s_end + 1:]
-            if re.match(r"[А-ЯЁ]{2,}", rest):
-                return acronym
-        # Check word to the left
-        if s_start > 0 and text[s_start - 1] == " ":
-            prefix = text[:s_start - 1]
+        # Reject if there is another ALL-CAPS word adjacent (before or after),
+        # optionally separated by punctuation and/or spaces.
+        # This handles headings/titles like "РУКА, СОЗДАВШАЯ НАС" or "ТОМАС ПЭЙН".
+        # Check word to the right: skip punctuation/spaces after the acronym
+        right_idx = s_end
+        while right_idx < len(text) and text[right_idx] in ' ,;:.!?-–—':
+            right_idx += 1
+        if right_idx < len(text) and re.match(r"[А-ЯЁ]{2,}", text[right_idx:]):
+            return acronym
+        # Check word to the left: skip punctuation/spaces before the acronym
+        left_idx = s_start - 1
+        while left_idx >= 0 and text[left_idx] in ' ,;:.!?-–—':
+            left_idx -= 1
+        if left_idx >= 0:
+            prefix = text[:left_idx + 1]
             if re.search(r"[А-ЯЁ]{2,}$", prefix):
                 return acronym
 

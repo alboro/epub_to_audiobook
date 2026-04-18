@@ -469,14 +469,14 @@ class AudiobookGenerator:
             if self.config.chunked_audio:
                 from audiobook_generator.core.audio_chunk_store import AudioChunkStore
                 from audiobook_generator.core.chunked_audio_generator import ChunkedAudioGenerator
-                from audiobook_generator.utils.filename_sanitizer import make_safe_filename as _msf
+                from audiobook_generator.utils.filename_sanitizer import make_safe_filename as _msf, make_chapter_key
                 run_id = self.config.current_run_index or "000"
                 chunk_store_path = os.path.join(self.config.output_folder, "_state", "audio_chunks.sqlite3")
                 chunk_store = AudioChunkStore(chunk_store_path)
                 chunk_store.ensure_run(run_id)
                 chunks_base = os.path.join(wav_out_dir, "chunks")
-                # Chapter key = safe directory name
-                chapter_key = _msf(title=title, idx=idx, output_dir=chunks_base, ext="", collision_check=False).rstrip(".")
+                # Chapter key = safe directory name (no extension)
+                chapter_key = make_chapter_key(title=title, idx=idx)
                 chunked = ChunkedAudioGenerator(
                     config=self.config,
                     chunk_store=chunk_store,

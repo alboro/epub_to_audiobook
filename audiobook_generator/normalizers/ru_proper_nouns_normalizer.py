@@ -95,6 +95,7 @@ INITIALS_BEFORE_PATTERN = re.compile(r"(?:\b[А-ЯЁ]\.\s*){1,3}$")
 
 class ProperNounsRuNormalizer(BaseNormalizer):
     STEP_NAME = "ru_proper_names"
+    STEP_VERSION = 2  # bumped: paradox guard applied after tsnorm accentuation
 
     def __init__(self, config: GeneralConfig):
         self.backend = None
@@ -114,6 +115,13 @@ class ProperNounsRuNormalizer(BaseNormalizer):
             raise ImportError(
                 "proper_nouns_ru requires the 'tsnorm' package. Install dependencies in a Python 3.10-3.12 environment."
             ) from exc
+
+    def get_resume_signature(self) -> dict:
+        return {
+            **super().get_resume_signature(),
+            "paradox_words": getattr(self.config, "normalize_stress_paradox_words", None) or "",
+            "min_word_len": self.config.normalize_tsnorm_min_word_length or 2,
+        }
 
     def normalize(self, text: str, chapter_title: str = "") -> str:
         if not is_russian_language(self.config.language):
@@ -145,7 +153,10 @@ class ProperNounsRuNormalizer(BaseNormalizer):
             chapter_title,
             replacements,
         )
-        return normalized
+        # Apply paradox guard to fix any stress errors introduced by tsnorm
+        from audiobook_generator.normalizers.ru_tts_stress_paradox_guard import get_paradox_guard
+        guard = get_paradox_guard(self.config)
+        return guard.apply_paradox_overrides(normalized)
 
     def _should_accent_candidate(self, text: str, start_index: int, word: str) -> bool:
         import unicodedata as _ud

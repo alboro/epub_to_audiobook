@@ -919,6 +919,28 @@ class TestProperNounsRuNormalizer(unittest.TestCase):
         self.assertIn("\u041f\u0440\u0430\u0432\u0430\u0301\u043c\u0438", result,
                       "Original 'Права́ми' must be preserved unchanged")
 
+    def test_paradox_guard_overrides_tsnorm_stress_in_proper_names(self):
+        """ru_proper_names must not produce wrong stress for paradox words.
+        Bug: tsnorm put 'То́лстым' (stress on о), paradox guard not applied in step 7,
+        step 9 used stale cache → wrong stress reached TTS.
+        Fix: paradox guard is applied at the end of ProperNounsRuNormalizer.normalize().
+        """
+        ACUTE = "\u0301"
+        # Config lists 'Толсты́м' as paradox word (canonical stress on ы)
+        config = make_config(
+            normalize_steps="ru_proper_names",
+            normalize_stress_paradox_words=f"Толсты\u0301м",
+        )
+        normalizer = ProperNounsRuNormalizer(config)
+        # Simulate tsnorm putting wrong stress on о
+        normalizer.backend = lambda word: f"То{ACUTE}лстым" if word == "Толстым" else word
+        text = "написанном графом Льво́м Толстым в газету"
+        result = normalizer.normalize(text)
+        self.assertIn(f"Толсты{ACUTE}м", result,
+                      "Paradox guard must enforce 'Толсты́м' even in step 7")
+        self.assertNotIn(f"То{ACUTE}лстым", result,
+                         "Wrong tsnorm stress 'То́лстым' must be overridden by paradox guard")
+
     def test_no_double_stress_on_царя_and_отца(self):
         """Words like 'Царя́' and 'Отца́' that already carry a stress mark must not
         receive a second one from the ru_proper_names normalizer.
@@ -1437,6 +1459,14 @@ class TestAbbreviationsRuNormalizer(unittest.TestCase):
         result = self.n.normalize("ЛЕВ НИКОЛАЕВИЧ ТОЛСТОЙ жил в Ясной Поляне.")
         self.assertNotIn("эл-е-вэ", result, "ЛЕВ must not be letter-expanded in multiword caps name")
         self.assertIn("ЛЕВ", result)
+
+    def test_allcaps_multiword_name_with_comma_not_expanded(self):
+        """ALL-CAPS words separated by a comma must not be letter-expanded.
+        Bug: 'РУКА, СОЗДАВШАЯ НАС, БОЖЕСТВЕННА' → 'эр-у-ка-а, СОЗДАВШАЯ...'
+        because the adjacent-caps check only looked for a space, not comma+space."""
+        result = self.n.normalize("РУКА, СОЗДАВШАЯ НАС, БОЖЕСТВЕННА.")
+        self.assertNotIn("эр-", result, "РУКА must not be letter-expanded before comma + ALL-CAPS")
+        self.assertIn("РУКА", result)
 
     def test_single_isolated_allcaps_acronym_still_expanded(self):
         """A standalone 2-letter acronym like РФ must still be expanded."""

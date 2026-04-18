@@ -210,6 +210,7 @@ class ProperNounsPronunciationRuNormalizer(BaseNormalizer):
             "pronunciation_overrides": sorted(self.pronunciation_overrides.items()),
             "stress_overrides": sorted(self.stress_overrides.items()),
             "min_word_len": self.config.normalize_tsnorm_min_word_length or 2,
+            "paradox_words": getattr(self.config, "normalize_stress_paradox_words", None) or "",
         }
 
     def _apply_builtin_hints(self, text: str) -> str:
